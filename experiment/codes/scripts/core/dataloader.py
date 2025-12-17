@@ -11,6 +11,7 @@ If necessary, we could investigate modifying this to holding data as cupy arrays
 #Importing libraries
 import torch
 import numpy as np
+import h5py
 
 #Custom dataset object
 class DataSet(torch.utils.data.Dataset):
