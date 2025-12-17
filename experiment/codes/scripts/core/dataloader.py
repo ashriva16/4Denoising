@@ -58,12 +58,17 @@ class DataSet5(torch.utils.data.Dataset):
             self.left_exclude=2
             self.right_exclude=2
             self.Rx=self.imgs[0].shape[0]
-            self.Ry=self.imgs[0].shape[1]            
+            self.Ry=self.imgs[0].shape[1]   
+            self.n=5         
         elif self.samplershape == '3d' or '3s':
             self.top_exclude=1
             self.bottom_exclude=1
             self.left_exclude=1
             self.right_exclude=1
+        if self.samplershape == '3d':
+            self.n=5
+        if self.samplershape == '3s':
+            self.n=5
         self.Rx=self.imgs[0].shape[0]
         self.Ry=self.imgs[0].shape[1]
         self.Rx_cut=self.imgs[0].shape[0]-self.top_exclude-self.bottom_exclude
@@ -93,12 +98,12 @@ class DataSet5(torch.utils.data.Dataset):
         shape: str
             A predefined str for the shape of area to extract the patch from for video denoising
             Currently supported shapes:
-                5l: a line 5 long along the horizontal direction, skipping the centre: xxoxx
+                5l: a line 5 long along the horizontal direction: xxxxx
                 3d: a diamond 3 wide: oxo
-                                      xox
+                                      xxx
                                       oxo
                 3s: a square 3 wide:  xxx
-                                      xox
+                                      xxx
                                       xxx
         
         Returns
@@ -112,29 +117,18 @@ class DataSet5(torch.utils.data.Dataset):
                 #Because of the sampler, we have to downsample, cannot train with all pixels of the image, we have to exclude some at the edges
 
         if samplershape == '5l':
-            self.n=4
             slicer = np.mgrid[0:1,-2:3]
             keep = np.ones_like(slicer).astype('bool')[0]
-            keep[
-                [0],
-                [2]
-            ] = False
             slicer = slicer[:,keep]
         elif samplershape == '3d' or '3s':
             slicer = np.mgrid[-1:2,-1:2]
             keep = np.ones_like(slicer).astype('bool')[0]
             if samplershape == '3d':
                 keep[
-                    [0,2,1,0,2],
-                    [0,0,1,2,2]
+                    [0,2,0,2],
+                    [0,0,2,2]
                 ] = False
-                self.n=4
-            elif samplershape == '3s':
-                keep[
-                    1,
-                    1
-                ] = False
-                self.n=8
+        elif samplershape == '3s':
             slicer = slicer[:,keep]
         
         # Shift the slicer to the chosen scan position
