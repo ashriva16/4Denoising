@@ -1,63 +1,40 @@
 import argparse
+from collections import OrderedDict
 from pathlib import Path
 
-import core.models as models
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-import torch.nn as nn
-from core.data import STEMDataSet as DataSet
 from torch.amp import autocast
+
+import core.models as models
+from core.data import STEMDataSet as DataSet
 from utils.opts import get_configuration
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 use_amp = (device == "cuda")
 
-# definition for loading model from a pretrained network file
-def load_model(model_path, Fast=False, parallel=False, pretrained=True, old=True, load_opt=False,
-            mf2f=False):
-    if not Fast:
-        # Explicitly disable weights_only to allow loading checkpoints saved with argparse.Namespace
-        ckpt = torch.load(model_path, map_location="cpu", weights_only=False)
-        args = argparse.Namespace(**{**vars(ckpt["args"])})
-        # ignore this
-        if old:
-            vars(args)['blind_noise'] = False
+def load_model(cfg, model_path):
 
-        model = models.build_model(args)
-        optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
-    else:
-        model = models.FastDVDnet(mf2f=mf2f)
-        ckpt = None
+    args = argparse.Namespace(
+        model=cfg.model.name,
+        channels=cfg.model.channels,
+        out_channels=cfg.model.out_channels,
+        bias=cfg.model.bias,
+        normal=cfg.model.normal,
+        blind_noise=cfg.model.blind_noise,
+    )
+    model = models.build_model(args).to(device).eval()
 
-    if load_opt and not Fast:
-        for o, state in zip([optimizer], ckpt.get("optimizer", []), strict=False):
-            o.load_state_dict(state)
+    ckpt = torch.load(model_path, map_location="cpu", weights_only=False)
+    state_dict = ckpt["model"][0]
 
-    if pretrained:
-        if Fast:
-            state_dict = torch.load(model_path, weights_only=False, map_location="cpu")
-        else:
-            state_dict = ckpt["model"][0]
-        own_state = model.state_dict()
+    if next(iter(state_dict)).startswith("module."):
+            state_dict = {k[7:]: v for k, v in state_dict.items()}
 
-        for name, param in state_dict.items():
-            if parallel:
-                name = name[7:]
-            if Fast and not mf2f:
-                name = name.split('.', 1)[1]
-            if name not in own_state:
-                print("not matching: ", name)
-                continue
-            if isinstance(param, nn.Parameter):
-                # backwards compatibility for serialized parameters
-                param = param.data
-            own_state[name].copy_(param)
+    model.load_state_dict(state_dict, strict=True)
 
-    if not Fast:
-        return model, optimizer, args
-    else:
-        return model
+    return model
 
 def plot_one(gt_img, pred_img, output_dir, name="run_pretrained.png"):
     # gt_img: (H,W) numpy
@@ -65,11 +42,11 @@ def plot_one(gt_img, pred_img, output_dir, name="run_pretrained.png"):
 
     fig, axes = plt.subplots(1, 2, figsize=(10, 5))
 
-    im0 = axes[0].imshow(gt_img, cmap="magma")
+    im0 = axes[0].imshow(gt_img**0.1, cmap="turbo")
     axes[0].set_title("Ground Truth")
     fig.colorbar(im0, ax=axes[0], fraction=0.046, pad=0.04)
 
-    im1 = axes[1].imshow(pred_img, cmap="magma")
+    im1 = axes[1].imshow(pred_img**0.1, cmap="turbo")
     axes[1].set_title("Prediction")
     fig.colorbar(im1, ax=axes[1], fraction=0.046, pad=0.04)
 
@@ -96,9 +73,7 @@ def main(cfg, config_path: Path):
                                     shuffle=False, num_workers=0)
     # example = 0
     model_path = codes_path / "pretrained" / "fluoro_micro.pt"
-    model, _, _ = load_model(model_path, parallel=True,
-                                        pretrained=True, old=True, load_opt=False)
-    model = model.to(device).eval()
+    model = load_model(cfg, model_path)
 
     total_eval = cfg.validate.batch_size*cfg.validate.max_batch
     preds = np.zeros((total_eval, H, W), dtype=np.float32)

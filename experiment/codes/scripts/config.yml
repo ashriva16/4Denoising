@@ -1,7 +1,9 @@
 dataset:
   # location must be relative to config file
-  data_dir: "../../data/raw/"
-  file: "4D-STEM_data_for_theophylline/20220711_182642_data_150kX_binned2.hdf5"
+  # data_dir: "../../data/raw/"
+  # file: "4D-STEM_data_for_theophylline/20220711_182642_data_150kX_binned2.hdf5"
+  data_dir: "../../data/processed/"
+  file: "p-terphenyl_20_heavy-noise.hdf5"
   samplershape: "5l"
 
 train:
@@ -13,11 +15,11 @@ train:
   val_split: 0.3
   seed: 314
   checkpoint: 1
+  finetune_patterns: ["dec1", "nin_"]
 
 validate:
   batch_size: 1
   max_batch: 2
-
 
 model:
   name: "blind-video-net-4"

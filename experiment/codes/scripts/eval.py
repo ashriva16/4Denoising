@@ -37,11 +37,11 @@ def plot_one(gt_img, pred_img, output_dir, name="run_pretrained.png"):
 
     fig, axes = plt.subplots(1, 2, figsize=(10, 5))
 
-    im0 = axes[0].imshow(gt_img, cmap="magma")
+    im0 = axes[0].imshow(gt_img**0.1, cmap="turbo")
     axes[0].set_title("Ground Truth")
     fig.colorbar(im0, ax=axes[0], fraction=0.046, pad=0.04)
 
-    im1 = axes[1].imshow(pred_img, cmap="magma")
+    im1 = axes[1].imshow(pred_img**0.1, cmap="turbo")
     axes[1].set_title("Prediction")
     fig.colorbar(im1, ax=axes[1], fraction=0.046, pad=0.04)
 
