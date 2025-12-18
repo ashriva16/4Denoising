@@ -1,36 +1,35 @@
-# configs/opts_nesting_test.yml
-# Purpose: exercise nested keys + typing edge cases for opts.py flatten/unflatten
-
 dataset:
-  data_root: "../data/mnist/"
-  train: "../data/train"
-  test: "../data/test"
+  # location must be relative to config file
+  data_dir: "../../data/raw/"
+  file: "4D-STEM_data_for_theophylline/20220711_182642_data_150kX_binned2.hdf5"
+  samplershape: "5l"
 
 train:
-  job: 1
-  start_epoch: 0
-  batch_size: 100
-  learning_rate: 0.004
-  lr_sci: 1e-4              # scientific notation float
-  total_epochs: 5
-  use_amp: true             # boolean default True (CLI should support turning off later)
-  deterministic: false      # boolean default False
-  gpus: [0, 1]              # list of ints
-  tags: []                  # empty list (type ambiguous; will default to str if you infer)
+  num_epochs: 1
+  batch_size: 1
+  lr: 0.0001
+  milestones: [15, 30, 40]
+  gamma: 0.5
+  val_split: 0.3
+  seed: 314
+  checkpoint: 1
+
+validate:
+  batch_size: 1
+  max_batch: 2
+
 
 model:
-  name: "resnet18"          # string
-  pretrained: true
-  dropout: 0.1
-  hidden_sizes: [256, 128]  # list of ints
+  name: "blind-video-net-4"
+  channels: 1
+  out_channels: 1
+  bias: false
+  normal: false
+  blind_noise: false
 
 output:
-  checkpoint: 1             # int (e.g., save every N epochs); change to true/false if you mean boolean
-  path: "../results/"
-  run_id: "001"             # string that looks numeric (should remain string)
-  notes: "test run"
+  # location must be relative to config file
+  save_dir: "../../results"
+  filename: "best_model.pt"
 
-augment:
-  enabled: true
-  flips: ["h", "v"]         # list of strings
-  color_jitter: 0.2
+pre_train_path: "../../results/blind-video-net-4/run0/best_model.pth"

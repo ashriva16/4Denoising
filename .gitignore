@@ -227,3 +227,5 @@ results/**
 Taskfile.yml
 *.hdf5
 *.png
+*.npy
+run*

@@ -13,7 +13,7 @@ def save_checkpoint(model, optimizer, scheduler, epoch, save_path, best=False, h
     os.makedirs(save_path, exist_ok=True)
 
     checkpoint = {
-        "model_state_dict": model.state_dict(),
+        "model": model.state_dict(),
         "optimizer": optimizer.state_dict(),
         "optimizer_name": type(optimizer).__name__,
         "scheduler": scheduler.state_dict() if scheduler else None,
