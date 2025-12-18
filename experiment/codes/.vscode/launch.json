@@ -10,6 +10,17 @@
       "console": "integratedTerminal"
     },
     {
+      "name": "Python: Current File (codes)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${file}",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/scripts"
+      }
+    },
+    {
       "name": "Python: Script with Args",
       "type": "debugpy",
       "request": "launch",

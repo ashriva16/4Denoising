@@ -16,8 +16,7 @@ import numpy as np
 import torch
 
 
-
-class DataSet5(torch.utils.data.Dataset):
+class STEMDataSet(torch.utils.data.Dataset):
     '''
     Makes a Dataset object for torch given a path to a dataset in a hdf5 file
 
@@ -123,7 +122,8 @@ class DataSet5(torch.utils.data.Dataset):
             slicer = np.mgrid[0:1,-2:3]
             keep = np.ones_like(slicer).astype('bool')[0]
             slicer = slicer[:,keep]
-        elif samplershape == '3d' or '3s':
+
+        elif samplershape in ('3d', '3s'):
             slicer = np.mgrid[-1:2,-1:2]
             keep = np.ones_like(slicer).astype('bool')[0]
             if samplershape == '3d':
@@ -131,7 +131,8 @@ class DataSet5(torch.utils.data.Dataset):
                     [0,2,0,2],
                     [0,0,2,2]
                 ] = False
-        elif samplershape == '3s':
+            elif samplershape == '3s':
+                pass
             slicer = slicer[:,keep]
 
         # Shift the slicer to the chosen scan position
@@ -144,6 +145,12 @@ class DataSet5(torch.utils.data.Dataset):
         coord_list = (shifted_slicer_1[:,keepBR]).T
 
         return coord_list
+
+    def index_to_RxRy(self, index: int):
+        Rx_pos = int(index / self.Ry_cut) + self.top_exclude
+        Ry_pos = index % self.Ry_cut + self.left_exclude
+        print(f"Scannig location (x,y): {Rx_pos, Ry_pos} for index {index}")
+        return Rx_pos, Ry_pos
 
     def getitem(self, index):
         '''
@@ -175,18 +182,16 @@ class DataSet5(torch.utils.data.Dataset):
 
         self.samplershape=samplershape
 
-        Rx_pos=int(index/self.Ry_cut)+self.top_exclude
-        Ry_pos=index%self.Ry_cut+self.left_exclude
-        print("x and y:", Rx_pos, Ry_pos)
+        Rx_pos, Ry_pos = self.index_to_RxRy(index)
         coord_list = self.selector(Rx_pos, Ry_pos)
-        item_output=torch.tensor(self.imgs[0][Rx_pos, Ry_pos],dtype = torch.float16)/300
-        item_input=[]
-        for coords in coord_list:
-            item_input.append(self.imgs[0][coords[0],coords[1]])
-        item_input=torch.tensor(item_input,dtype = torch.float16)/300
+
+        item_output = torch.from_numpy(self.imgs[0][Rx_pos, Ry_pos]).to(torch.float32) / 300
+
+        arr = np.stack([self.imgs[0][c[0], c[1]] for c in coord_list], axis=0)
+        item_input = torch.from_numpy(arr).to(torch.float32) / 300
 
         if item_input.shape[0]!=self.n:
-            ValueError("Incorrect number of channels. This is probably because, somehow," \
+            raise ValueError("Incorrect number of channels. This is probably because, somehow," \
             "values of Rx_pos and Ry_pos have been chosen that are near the edge of the" \
             "image, so the samples is off the edge of the image and cannot sample fully.")
 
