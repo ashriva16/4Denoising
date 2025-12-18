@@ -199,3 +199,84 @@ class STEMDataSet(torch.utils.data.Dataset):
 
     def __getitem__(self,index):
         return self.getitem(index)
+
+class SequenceDataSet(torch.utils.data.Dataset):
+    '''
+    Makes a Dataset object for torch given a path to the data files in a numbered sequence and 
+    the index of the one you want to grab for denoising, currently assuming all files are
+    numpy (it would be easy to load from a list of hdf5 files, or with more work, the specific
+    binary raw format of any preferred detector)
+
+    Just the 5l selector is implemented
+
+    getitem uses this in defining the pixels chosen for return of diffraction
+    patterns in surrounding pixels in item_input
+
+    the original pixel diffraction pattern is returned in item_output
+    '''
+    def __init__(self, file_path, basename, index, samplershape="5l"):
+        '''
+        Five files are needed, so self.imgs only has five items.
+
+        Parameters
+        ----------
+        filepath: string
+            file path of the folder in which the sequence of 2D diffraction patterns are found
+        basename: string
+            the starting text for every data file in the sequence, before the index number
+        index: int
+            the index of the desired data file for denoising
+            
+        samplershape: string
+            onle 5l implemented
+        '''
+        self.imgs=[]
+        
+        fullfile_path = file_path+basename
+        
+        for nnnn in np.arange(-2,3)+index:
+            self.imgs.append(np.load(fullfile_path+f'{nnnn:04d}'))
+
+        self.samplershape=samplershape
+        assert self.samplershape == '5l', 'only 5l currently implemented'
+        
+        self.n=5
+ 
+    def __len__(self):
+        """
+        This is just the name of useable pixels in the downsamples frame.
+        If this software is changed to multi-image, we will have to change this
+        """
+        return self.n
+
+    #Note that this uses the sane person co-ordinate convention (x,y), while the rest of the program uses numpy convention (y,x), with weird results (e.g. the line for 5l is actually in the y-direction. We should probably fix this.)
+
+    def getitem(self, index):
+        '''
+        gets the real space positions to select from the input of index
+
+        Parameters
+        ----------
+        index: int
+            Index corresponding to a real space pixel in the datastream reading left-right, 
+            one row at a time, as for normal raster scanning
+
+        Returns
+        -------
+        item_input:
+            input to ML model, which will be a tensor of shape (n,Qx,Qy), where Qx and Qy
+            are the sizes of the data in the diffraction directions vertically and horizontally.
+            n is fixed at 4.  The 
+        item_output:
+            currently just returns the diffraction pattern at the pixel at the index point
+            as tensor of shape (Qx,Qy)
+        '''
+        item_output = torch.from_numpy(self.imgs[2]).to(torch.float32) / 300
+
+        arr = np.stack([self.imgs[c] for c in [0,1,3,4]], axis=0)
+        item_input = torch.from_numpy(arr).to(torch.float32) / 300
+
+        return item_input, item_output
+
+    def __getitem__(self,index):
+        return self.getitem(index)
