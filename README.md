@@ -11,18 +11,11 @@
   <a href="https://github.com/ashriva16/4Denoising/pulls">
     <img alt="Pull Requests" src="https://img.shields.io/github/issues-pr/ashriva16/4Denoising" />
   </a>
-  <a href="https://github.com/ashriva16/4Denoising/actions/workflows/ci.yml">
-    <img alt="CI" src="https://github.com/ashriva16/4Denoising/actions/workflows/ci.yml/badge.svg" />
-  </a>
-  <a href="https://github.com/ashriva16/4Denoising/actions/workflows/doc.yml">
-    <img alt="CI" src="https://github.com/ashriva16/4Denoising/actions/workflows/doc.yml/badge.svg" />
-  </a>
 </p>
 
 # Unsupervised Deep Denoising for High-Dimensional Microscopy Data
 
 **Authors:**
-**Authors**
 Leonardo Cancellara¹ · William Talbott² · **Ankit Shrivastava³** · Jordi Weingard² · Dingqiao Ji¹ · Ian MacLaren⁴
 
 ¹ Max Planck Institute of Colloids and Interfaces
