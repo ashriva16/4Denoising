@@ -64,7 +64,7 @@ cd 4Denoising
     source .venv/bin/activate
     python -m scripts.train # to train model from scratch
     python -m scripts.eval # to evaluate trained model
-    python -m scripts.run_pretrain # to run pretrained UDVD model see reference
+    python -m scripts.run_pretrain # to run pretrained UDVD model, see references
     python -m scripts.finetune # to finetune pretrained trained model
     ```
 
@@ -73,7 +73,7 @@ cd 4Denoising
 ## 👤 Maintainer
 
 **Ankit Shrivastava**
-Feel free to open an issue or discussion for support.
+Feel free to contact me for issues.
 
 ---
 
