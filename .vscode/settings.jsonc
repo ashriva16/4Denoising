@@ -1,0 +1,63 @@
+{
+  "window.autoDetectColorScheme": true,
+  "editor.formatOnPaste": true,
+  "editor.linkedEditing": true,
+
+  // Use your project's virtual environment
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+  "python.terminal.activateEnvironment": true,
+
+  // ------------------------------
+  // Formatting (Black)
+  // ------------------------------
+  "editor.formatOnSave": true,
+
+  "[python]": {
+    "editor.defaultFormatter": "ms-python.black-formatter",
+    "editor.codeActionsOnSave": {
+      // Let Ruff handle fixes and imports explicitly if you want:
+      "source.fixAll.ruff": "explicit",
+      "source.organizeImports.ruff": "explicit"
+    }
+  },
+
+  // Black reads settings (line length, version) from pyproject.toml
+  "black-formatter.args": [],
+
+  // Visual ruler matches Black/Ruff line length
+  "editor.rulers": [100],
+
+  "ruff.nativeServer": "on",
+  "ruff.lint.enable": true,
+  "mypy-type-checker.interpreter": [
+    "${workspaceFolder}/.venv/bin/python"
+  ],
+  "mypy-type-checker.importStrategy": "fromEnvironment",
+  "mypy-type-checker.args": [
+    "--config-file",
+    "${workspaceFolder}/pyproject.toml"
+  ],
+  "mypy-type-checker.reportingScope": "workspace",
+  // ------------------------------
+  // Testing (Pytest)
+  // ------------------------------
+  "python.testing.pytestEnabled": true,
+  "python.testing.pytestArgs": ["tests"],
+  "python.testing.unittestEnabled": false,
+
+  // ------------------------------
+  // Exclude junk folders from workspace
+  // ------------------------------
+  "files.exclude": {
+    "**/.mypy_cache": true,
+    "**/.pytest_cache": true,
+    "**/__pycache__": true,
+    "**/.venv": true
+  },
+  "search.exclude": {
+    "**/.mypy_cache": true,
+    "**/.pytest_cache": true,
+    "**/__pycache__": true,
+    "**/.venv": true
+  },
+}

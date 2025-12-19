@@ -1,0 +1,145 @@
+import argparse
+from pathlib import Path
+from typing import cast
+
+import torch
+import torch.nn.functional as F
+from torch.amp import GradScaler, autocast
+from tqdm.auto import tqdm
+
+import core.models as models
+from core.data import STEMDataSet as DataSet
+from utils.logger import log_results, save_checkpoint, setup_logging
+from utils.opts import get_configuration
+
+device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+use_bf16 = (device.type == "cuda" and torch.cuda.get_device_capability(0)[0] >= 8)
+dtype = torch.bfloat16 if use_bf16 else torch.float16
+
+def load_model(cfg):
+    args = argparse.Namespace(
+        model=cfg.model.name,
+        channels=cfg.model.channels,
+        out_channels=cfg.model.out_channels,
+        bias=cfg.model.bias,
+        normal=cfg.model.normal,
+        blind_noise=cfg.model.blind_noise,
+    )
+    model = models.build_model(args).to(device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=cfg.train.lr)
+    return model, optimizer
+
+def main(cfg, config_path: Path):
+    torch.manual_seed(cfg.train.seed)
+
+    # DATA SETUP ------------------------------------------------------
+    filepath = config_path.parent / cfg.dataset.data_dir / cfg.dataset.file
+    ds = DataSet(filepath, samplershape=cfg.dataset.samplershape)
+    ds = torch.utils.data.Subset(ds, range(10)) # only fro debugging
+
+    val_size = int(cfg.train.val_split * len(ds))
+    train_size = len(ds) - val_size
+    train, valid = torch.utils.data.random_split(
+        ds,
+        [train_size, val_size],
+        generator=torch.Generator().manual_seed(cfg.train.seed),
+    )
+    train_loader = torch.utils.data.DataLoader(
+        train, batch_size=cfg.train.batch_size, shuffle=True, num_workers=4,
+                pin_memory=(device.type == "cuda"),
+                persistent_workers=(device.type == "cuda"),
+                prefetch_factor=4,
+    )
+    valid_loader = torch.utils.data.DataLoader(
+        valid, batch_size=cfg.train.batch_size, shuffle=False, num_workers=0,
+        pin_memory=(device.type == "cuda"),
+    )
+
+
+    # Model Setup ---------------------------------------------
+    model, optimizer = load_model(cfg)
+    if device.type == "cuda":
+        model = cast(torch.nn.Module, torch.compile(model, mode="reduce-overhead"))
+    model.name = cfg.model.name
+
+    # Training Setup -----------------------------------------------------------
+    scaler = GradScaler(enabled=device.type == "cuda")
+    scheduler = torch.optim.lr_scheduler.MultiStepLR(
+        optimizer, milestones=cfg.train.milestones, gamma=cfg.train.gamma
+    )
+
+    # Logging / checkpoint setup
+    log_root = (config_path.parent / cfg.output.save_dir).resolve()
+    log_root.mkdir(parents=True, exist_ok=True)
+    args_for_logger = argparse.Namespace(model=cfg.model.name, **cfg.train)
+    logger = setup_logging(args_for_logger, model, str(log_root) + "/")
+    save_checkpoint(model, optimizer, scheduler, 0, args_for_logger.log_path, hparams=cfg)
+
+    # Begin training -------------------------------------------------------
+    best_loss = float("inf")
+    for epoch in tqdm(range(cfg.train.num_epochs), desc="Epochs", leave=True, dynamic_ncols=True):
+
+        model.train()
+        train_loss_sum, train_count = 0, 0
+        for inputs, targets in train_loader:
+            inputs = inputs.to(device, non_blocking=True)
+            targets = targets.unsqueeze(0).to(device, non_blocking=True)
+
+            optimizer.zero_grad(set_to_none=True)
+            with autocast(device_type=device.type, enabled=(device.type == "cuda"),
+                        dtype=dtype):
+                outputs, _ = model(inputs)
+                loss = F.mse_loss(outputs, targets)
+
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+
+            train_loss_sum += loss.item()
+            train_count += 1
+
+        train_mean = train_loss_sum / max(train_count, 1)
+        scheduler.step()
+
+        # ------- Validating at certain intervals -------------------------
+        do_val = ((epoch + 1) % cfg.train.checkpoint == 0) or ((epoch + 1) == cfg.train.num_epochs)
+        if do_val:
+            model.eval()
+            val_loss_sum, val_count = 0, 0
+            with torch.no_grad():
+                for inputs, targets in valid_loader:
+                    inputs = inputs.to(device, non_blocking=True)
+                    targets = targets.unsqueeze(0).to(device, non_blocking=True)
+                    with autocast(device_type=device.type, enabled=(device.type == "cuda"),
+                                dtype=dtype):
+                        outputs, _ = model(inputs)
+
+                    val_loss_sum += F.mse_loss(outputs, targets).item()
+                    val_count += 1
+
+            current_loss = val_loss_sum / max(val_count, 1)
+            if current_loss < best_loss:
+                best_loss = current_loss
+                save_checkpoint(model, optimizer, scheduler, epoch + 1, args_for_logger.log_path,
+                                best=True, hparams=cfg)
+
+            # save checkpoint each validation
+            save_checkpoint(model, optimizer, scheduler, epoch + 1, args_for_logger.log_path,
+                            hparams=cfg)
+            log_results(logger, {"train": train_mean, "validation": current_loss}, epoch + 1)
+            logger["file"].info(f"Learning rate: {optimizer.param_groups[0]['lr']}")
+
+    # Final save of best checkpoint
+    save_checkpoint(model, optimizer, scheduler,
+                    int(cfg.train.num_epochs), args_for_logger.log_path, hparams=cfg)
+
+if __name__ == "__main__":
+    config_path = Path(__file__).with_name("config.yml").resolve()
+    config = get_configuration(config_path)
+
+    if device.type == "cuda":
+        torch.cuda.manual_seed_all(config.train.seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+    main(config, config_path)

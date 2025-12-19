@@ -1,71 +1,95 @@
-# mic-hackathon 2025
+<p align="left">
+  <a href="https://opensource.org/licenses/MIT">
+    <img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg" />
+  </a>
+  <img alt="Python Version" src="https://img.shields.io/badge/python-3.8%2B-blue" />
+  <img alt="Repo Size" src="https://img.shields.io/github/repo-size/ashriva16/4Denoising" />
+  <img alt="Last Commit" src="https://img.shields.io/github/last-commit/ashriva16/4Denoising" />
+  <a href="https://github.com/ashriva16/4Denoising/issues">
+    <img alt="Issues" src="https://img.shields.io/github/issues/ashriva16/4Denoising" />
+  </a>
+  <a href="https://github.com/ashriva16/4Denoising/pulls">
+    <img alt="Pull Requests" src="https://img.shields.io/github/issues-pr/ashriva16/4Denoising" />
+  </a>
+  <a href="https://github.com/ashriva16/4Denoising/actions/workflows/ci.yml">
+    <img alt="CI" src="https://github.com/ashriva16/4Denoising/actions/workflows/ci.yml/badge.svg" />
+  </a>
+  <a href="https://github.com/ashriva16/4Denoising/actions/workflows/doc.yml">
+    <img alt="CI" src="https://github.com/ashriva16/4Denoising/actions/workflows/doc.yml/badge.svg" />
+  </a>
+</p>
 
-## Project Overview
+# Unsupervised Deep Denoising for High-Dimensional Microscopy Data
 
-**Author:** Ankit Shrivastava
+**Authors:**
+**Authors**
+Leonardo Cancellara¹ · William Talbott² · **Ankit Shrivastava³** · Jordi Weingard² · Dingqiao Ji¹ · Ian MacLaren⁴
 
-**Description:** A short description of the research project.
+¹ Max Planck Institute of Colloids and Interfaces
+² University of Manchester
+³ Oak Ridge National Laboratory
+⁴ School of Physics and Astronomy, University of Glasgow, UK
 
-- This project aims to explore and implement various experiments related to **mic-hackathon**.
+## 📌 Description
 
-## Instructions
+This repository implements an unsupervised deep-learning framework for denoising high-dimensional microscopy data, with a primary focus on 4D-STEM.
+The approach is based on UDVD (Unsupervised Deep Video Denoising), a UNet-based convolutional neural network that exploits structural similarity between neighboring frames without requiring any ground-truth clean data.
 
-### Follow the method to push/pull your changes
+Originally developed for time-series video denoising, UDVD is generalized here to multidimensional microscopy datasets by replacing temporal adjacency with geometric-flow connectivity in real space. This enables pixel-wise denoising of diffraction patterns using spatially adjacent scan positions.
 
-- **Getting started**
+---
+
+## 📁 Repository Setup
 
 ```sh
-git pull origin main
+git clone https://github.com/ashriva16/4Denoising.git
+cd 4Denoising
 ```
 
-- **Create your branch for your task (choose a clear name) and follow the workflow locally**
+---
 
-```sh
-git checkout -b my-task-branch
+## 🚀 End-User Setup & Usage
 
-git add .
-git commit -m "Describe what you did."
-```
+- **Use the Makefile to create a .venv and install user-level dependencies.**
 
-- **push to remote for the first time**
+    ```bash
+    make env
+    ```
 
-```sh
-git push -u origin my-task-branch
-```
+    This creates `.venv/` and installs packages from `requirements.txt` (if present).
 
-- **after that, push usually**
+- **For refreshing and installing updated dependencies run**
 
-```sh
-git push
-```
-- **If you want to get updates from main into your branch**
+    ```bash
+    git pull        # get latest code + updated requirements.txt
+    make install    # refresh dependencies inside .venv
+    ```
 
-```sh
-# Update your branch with the newest main changes
-git pull origin main --rebase
-```
+- **Usage**
 
-### Directory Structure
+    ```sh
+    .venv/bin/python -m codes.main
+    ```
 
-```plaintext
-resources/
-├── old_codes/           # Archived scripts
-├── reference_work/      # Similar projects
+---
 
-documents/
-├── project_brief.md     # Summary of the project
-├── notes/               # Research notes
-│   ├── research_rev.md      # Single file containing the literature review
-│   ├── bibliography.bib     # Single file for insights
+## 👤 Maintainer
 
-experiment/
-├── codes/
-├── data/
-│   ├── raw/             # Raw input data
-│   └── processed/       # Processed data
-├── results/
-│   └── /
-│       └── logs/        # Subexperiment logs
+**Ankit Shrivastava**
+Feel free to open an issue or discussion for support.
 
-talks/                   # Presentations, abstracts
-```
+---
+
+## 📜 License
+
+This project is licensed under the [MIT License](https://opensource.org/licenses/MIT). See the `LICENSE` file for full details.
+
+---
+
+## 📘 References
+
+- [Cookiecutter Docs](https://cookiecutter.readthedocs.io)
+- [PEP 621](https://peps.python.org/pep-0621/)
+- [GitHub Actions](https://docs.github.com/en/actions)
+- https://github.com/crozier-del/UDVD-MF-Denoising/tree/v1.0?tab=readme-ov-file
+- https://github.com/sreyas-mohan/udvd

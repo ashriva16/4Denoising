@@ -1,0 +1,16 @@
+# Note for installed library versions in working environment on Training Machine #1 (MPI):
+
+cupy-cuda12x==13.6.0 (only working version, depends on GPU)
+numpy==1.26.4  (stable version with cuda+torch+py4dstem, should not be updgraded if avoidable)
+py4dstem==0.14.8 (stable version, should not be updgraded if possible)
+torch==2.9.1+cu126 (only working version, depends on cuda)
+torchvision==0.24.1+cu126 (only working version, depends on cuda)
+python==3.10.19
+
+# UNTESTED, can probably be upgraded if needed:
+hyperspy==2.3.0
+h5py==3.15.1
+numba==0.63.1
+scipy==1.15.3
+scikit-learn==1.7.2
+scikit-optimize==0.25.2
