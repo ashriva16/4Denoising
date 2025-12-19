@@ -209,8 +209,6 @@ __marimo__/
 docs/source/api/*
 
 # Ignore everything inside data/ and results/
-data/**
-results/**
 
 # Allow directory traversal so negations work
 !data/**/
@@ -226,6 +224,4 @@ results/**
 
 Taskfile.yml
 *.hdf5
-*.png
-*.npy
 run*
