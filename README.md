@@ -30,6 +30,9 @@ The approach is based on UDVD (Unsupervised Deep Video Denoising), a UNet-based 
 
 Originally developed for time-series video denoising, UDVD is generalized here to multidimensional microscopy datasets by replacing temporal adjacency with geometric-flow connectivity in real space. This enables pixel-wise denoising of diffraction patterns using spatially adjacent scan positions.
 
+![flow chart](resources/flowchart.png)
+
+## Youtube link
 [![Watch explanation](https://img.youtube.com/vi/NVjtHF1Ujv0/maxresdefault.jpg)](https://www.youtube.com/watch?v=NVjtHF1Ujv0)
 
 ---
