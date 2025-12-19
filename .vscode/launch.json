@@ -1,15 +1,65 @@
 {
-    // Use IntelliSense to learn about possible attributes.
-    // Hover to view descriptions of existing attributes.
-    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
-    "version": "0.2.0",
-    "configurations": [
-        {
-            "name": "Python Debugger: Current File",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${file}",
-            "console": "integratedTerminal"
-        }
-    ]
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Python: Current File",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${file}",
+      "cwd": "${fileDirname}",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Python: Current File (codes)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${file}",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/scripts"
+      }
+    },
+    {
+      "name": "Python: Script with Args",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/your_script.py",
+      "cwd": "${workspaceFolder}",
+      "args": ["--flag", "value"],
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Python: Tests (Unittest)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "unittest",
+      "cwd": "${workspaceFolder}",
+      "args": ["discover", "-s", "tests"],
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Python: Pytest",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "cwd": "${workspaceFolder}",
+      "args": ["tests"],
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Python: Flask",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "flask",
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "FLASK_APP": "app.py",
+        "FLASK_ENV": "development"
+      },
+      "args": ["run", "--no-debugger", "--no-reload"],
+      "jinja": true,
+      "console": "integratedTerminal"
+    }
+  ]
 }
