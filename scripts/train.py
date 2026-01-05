@@ -81,7 +81,13 @@ def main(cfg, config_path: Path):
 
         model.train()
         train_loss_sum, train_count = 0, 0
-        for inputs, targets in train_loader:
+        train_iter = tqdm(
+            train_loader,
+            desc=f"Train {epoch + 1}",
+            leave=False,
+            dynamic_ncols=True,
+        )
+        for inputs, targets in train_iter:
             inputs = inputs.to(device, non_blocking=True)
             targets = targets.unsqueeze(0).to(device, non_blocking=True)
 
