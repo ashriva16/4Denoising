@@ -45,7 +45,7 @@ def main(cfg, config_path: Path):
         generator=torch.Generator().manual_seed(cfg.train.seed),
     )
     train_loader = torch.utils.data.DataLoader(
-        train, batch_size=cfg.train.batch_size, shuffle=True, num_workers=4,
+        train, batch_size=cfg.train.batch_size, shuffle=True, num_workers=2,
                 pin_memory=(device.type == "cuda"),
                 persistent_workers=(device.type == "cuda"),
                 prefetch_factor=4,
