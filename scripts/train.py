@@ -1,20 +1,20 @@
 import argparse
 from pathlib import Path
-from typing import cast
 
 import torch
 import torch.nn.functional as F
 from torch.amp import GradScaler, autocast
-from tqdm.auto import tqdm
+from tqdm.auto import tqdm  # type: ignore[import-untyped]
 
 import core.models as models
 from core.data import STEMDataSet as DataSet
 from utils.logger import log_results, save_checkpoint, setup_logging
 from utils.opts import get_configuration
 
-device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-use_bf16 = (device.type == "cuda" and torch.cuda.get_device_capability(0)[0] >= 8)
+device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+use_bf16 = device.type == "cuda" and torch.cuda.get_device_capability(0)[0] >= 8
 dtype = torch.bfloat16 if use_bf16 else torch.float16
+
 
 def load_model(cfg):
     args = argparse.Namespace(
@@ -28,6 +28,7 @@ def load_model(cfg):
     model = models.build_model(args).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg.train.lr)
     return model, optimizer
+
 
 def main(cfg, config_path: Path):
     torch.manual_seed(cfg.train.seed)
@@ -45,16 +46,21 @@ def main(cfg, config_path: Path):
         generator=torch.Generator().manual_seed(cfg.train.seed),
     )
     train_loader = torch.utils.data.DataLoader(
-        train, batch_size=cfg.train.batch_size, shuffle=True, num_workers=2,
-                pin_memory=(device.type == "cuda"),
-                persistent_workers=(device.type == "cuda"),
-                prefetch_factor=4,
+        train,
+        batch_size=cfg.train.batch_size,
+        shuffle=True,
+        num_workers=2,
+        pin_memory=(device.type == "cuda"),
+        persistent_workers=(device.type == "cuda"),
+        prefetch_factor=4,
     )
     valid_loader = torch.utils.data.DataLoader(
-        valid, batch_size=cfg.train.batch_size, shuffle=False, num_workers=0,
+        valid,
+        batch_size=cfg.train.batch_size,
+        shuffle=False,
+        num_workers=0,
         pin_memory=(device.type == "cuda"),
     )
-
 
     # Model Setup ---------------------------------------------
     model, optimizer = load_model(cfg)
@@ -77,23 +83,27 @@ def main(cfg, config_path: Path):
 
     # Begin training -------------------------------------------------------
     best_loss = float("inf")
-    for epoch in tqdm(range(cfg.train.num_epochs), desc="Epochs", leave=True, dynamic_ncols=True):
+    for epoch in range(cfg.train.num_epochs):
+        do_val = ((epoch + 1) % cfg.train.checkpoint == 0) or ((epoch + 1) == cfg.train.num_epochs)
 
         model.train()
         train_loss_sum, train_count = 0, 0
-        train_iter = tqdm(
-            train_loader,
-            desc=f"Train {epoch + 1}",
-            leave=False,
-            dynamic_ncols=True,
+        train_iter = (
+            tqdm(
+                train_loader,
+                desc=f"Train {epoch}/{cfg.train.num_epochs - 1}",
+                leave=True,
+                dynamic_ncols=True,
+            )
+            if do_val
+            else train_loader
         )
         for inputs, targets in train_iter:
             inputs = inputs.to(device, non_blocking=True)
             targets = targets.unsqueeze(0).to(device, non_blocking=True)
 
             optimizer.zero_grad(set_to_none=True)
-            with autocast(device_type=device.type, enabled=(device.type == "cuda"),
-                        dtype=dtype):
+            with autocast(device_type=device.type, enabled=(device.type == "cuda"), dtype=dtype):
                 outputs, _ = model(inputs)
                 loss = F.mse_loss(outputs, targets)
 
@@ -108,7 +118,6 @@ def main(cfg, config_path: Path):
         scheduler.step()
 
         # ------- Validating at certain intervals -------------------------
-        do_val = ((epoch + 1) % cfg.train.checkpoint == 0) or ((epoch + 1) == cfg.train.num_epochs)
         if do_val:
             model.eval()
             val_loss_sum, val_count = 0, 0
@@ -116,8 +125,9 @@ def main(cfg, config_path: Path):
                 for inputs, targets in valid_loader:
                     inputs = inputs.to(device, non_blocking=True)
                     targets = targets.unsqueeze(0).to(device, non_blocking=True)
-                    with autocast(device_type=device.type, enabled=(device.type == "cuda"),
-                                dtype=dtype):
+                    with autocast(
+                        device_type=device.type, enabled=(device.type == "cuda"), dtype=dtype
+                    ):
                         outputs, _ = model(inputs)
 
                     val_loss_sum += F.mse_loss(outputs, targets).item()
@@ -126,23 +136,43 @@ def main(cfg, config_path: Path):
             current_loss = val_loss_sum / max(val_count, 1)
             if current_loss < best_loss:
                 best_loss = current_loss
-                save_checkpoint(model, optimizer, scheduler, epoch + 1, args_for_logger.log_path,
-                                best=True, hparams=cfg)
+                save_checkpoint(
+                    model,
+                    optimizer,
+                    scheduler,
+                    epoch + 1,
+                    args_for_logger.log_path,
+                    best=True,
+                    hparams=cfg,
+                )
 
             # save checkpoint each validation
-            save_checkpoint(model, optimizer, scheduler, epoch + 1, args_for_logger.log_path,
-                            hparams=cfg)
+            save_checkpoint(
+                model, optimizer, scheduler, epoch + 1, args_for_logger.log_path, hparams=cfg
+            )
             log_results(logger, {"train": train_mean, "validation": current_loss}, epoch + 1)
             logger["file"].info(f"Learning rate: {optimizer.param_groups[0]['lr']}")
+            tqdm.write(
+                f"Epoch {epoch}/{cfg.train.num_epochs - 1} "
+                f"- train: {train_mean:.4f} val: {current_loss:.4f} "
+                f"lr: {optimizer.param_groups[0]['lr']:.2e}"
+            )
 
     # Final save of best checkpoint
-    save_checkpoint(model, optimizer, scheduler,
-                    int(cfg.train.num_epochs), args_for_logger.log_path, hparams=cfg)
+    save_checkpoint(
+        model,
+        optimizer,
+        scheduler,
+        int(cfg.train.num_epochs),
+        args_for_logger.log_path,
+        hparams=cfg,
+    )
+
 
 if __name__ == "__main__":
     config_path = Path(__file__).with_name("config.yml").resolve()
     config = get_configuration(config_path)
-    print("#"*20, "/n" ,"using\t", device, "/n", "#"*20)
+    print("#" * 20, "/n", "using\t", device, "/n", "#" * 20)
 
     if device.type == "cuda":
         torch.cuda.manual_seed_all(config.train.seed)

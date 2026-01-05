@@ -5,7 +5,7 @@ import os
 
 import torch
 from torch.utils.tensorboard import SummaryWriter
-from torchinfo import summary
+from torchinfo import summary  # type: ignore[import-not-found]
 
 
 def save_checkpoint(model, optimizer, scheduler, epoch, save_path, best=False, hparams=None):

@@ -2,19 +2,19 @@ dataset:
   # location must be relative to config file
   # data_dir: "../../data/raw/"
   # file: "4D-STEM_data_for_theophylline/20220711_182642_data_150kX_binned2.hdf5"
-  data_dir: "../../data/processed/"
+  data_dir: "../data/processed/"
   file: "p-terphenyl_20_heavy-noise.hdf5"
   samplershape: "5l"
 
 train:
-  num_epochs: 10_000
+  num_epochs: 5
   batch_size: 1
   lr: 0.0001
   milestones: [15, 30, 40]
   gamma: 0.5
   val_split: 0.3
   seed: 314
-  checkpoint: 1
+  checkpoint: 2
   finetune_patterns: ["dec1", "nin_"]
 
 validate:
@@ -34,4 +34,4 @@ output:
   save_dir: "../../results"
   filename: "best_model.pt"
 
-pre_train_path: "../../results/blind-video-net-4/run0/best_model.pth"
+pre_train_path: "../results/blind-video-net-4/run0/best_model.pth"
