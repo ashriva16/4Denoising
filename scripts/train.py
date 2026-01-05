@@ -4,7 +4,7 @@ from pathlib import Path
 import torch
 import torch.nn.functional as F
 from torch.amp import GradScaler, autocast
-from tqdm.auto import tqdm  # type: ignore[import-untyped]
+from tqdm.auto import tqdm
 
 import core.models as models
 from core.data import STEMDataSet as DataSet

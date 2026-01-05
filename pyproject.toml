@@ -95,6 +95,11 @@ module = ["torch.*"]
 ignore_missing_imports = true
 follow_imports = "skip"
 
+[[tool.mypy.overrides]]
+module = ["h5py", "numpy", "torchinfo", "tqdm.*"]
+ignore_missing_imports = true
+follow_imports = "skip"
+
 # -------------------------
 # black
 # -------------------------
