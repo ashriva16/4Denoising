@@ -342,8 +342,8 @@ def build_training_dataset(data, neighbor_mode='alternating_spatial', image_size
         ds.set_epoch(0)
         return ds
     else:
-        # Fixed mode: use margin=2 for double-arrow temporal reach
-        margin = 2
+        # Fixed mode: use margin=1 for double-arrow temporal reach (minimal loss of info compared to margin=2)
+        margin = 1
         positions = []
         for rx in range(margin, base_dataset.Rx() - margin):
             for ry in range(margin, base_dataset.Ry() - margin):
