@@ -26,13 +26,16 @@ from core.preprocessing import (
     save_denoised_h5,
 )
 from utils.opts import get_configuration
+from core.io import load_4dstem
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 def load_data(cfg, config_path):
     """Load and preprocess data (same pipeline as training)."""
-    filepath = config_path.parent / cfg.dataset.data_dir / cfg.dataset.file
+    filepath = Path(cfg.dataset.data_dir) / cfg.dataset.file
+    if not filepath.is_absolute():
+        filepath = Path.cwd() / filepath  # relative to where you run the command    data, metadata = load_4dstem(filepath, crop_N=cfg.dataset.get('crop_N', None))
     data, metadata = load_4dstem(filepath, crop_N=cfg.dataset.get('crop_N', None))
 
     # Must match training preprocessing exactly
@@ -274,5 +277,22 @@ def get_args():
 
 
 if __name__ == "__main__":
-    args = get_args()
-    main(args)
+    import argparse as ap
+    import sys
+
+    parser = ap.ArgumentParser()
+    parser.add_argument("--config", type=str, default="configs/config.yml")
+    cli_args, remaining = parser.parse_known_args()
+
+    # Remove --config from sys.argv so get_configuration doesn't choke
+    sys.argv = [sys.argv[0]] + remaining
+
+    config_path = Path(cli_args.config).resolve()
+    config = get_configuration(config_path)
+
+    if device.type == "cuda":
+        torch.cuda.manual_seed_all(config.train.seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+    main(config, config_path)
