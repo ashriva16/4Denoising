@@ -22,7 +22,7 @@ from core.models import get_unet
 from core.dataloader import DataSetFromArray
 from core.preprocessing import (
     bin_datacube, offset_datacube, remove_offset,
-    correct_pnll_bias, build_defect_mask, inpaint_defects,
+    correct_pnll_bias, detect_dead_pixels, correct_dead_pixels,
     save_denoised_h5,
 )
 from utils.opts import get_configuration
@@ -40,8 +40,18 @@ def load_data(cfg, config_path):
         data = bin_datacube(data, cfg.dataset.bin_factor)
 
     if cfg.dataset.get('defect_mask', False):
-        mask = build_defect_mask(data, sigma_threshold=cfg.dataset.get('defect_sigma', 5))
-        data = inpaint_defects(data, mask)
+        mask, stats = detect_dead_pixels(
+            data,
+            method=cfg.dataset.get('defect_method', 'combined'),
+            threshold_factor=cfg.dataset.get('defect_sigma', 5),
+            min_dead_fraction=cfg.dataset.get('defect_dead_fraction', 0.8),
+            visualize=False,
+        )
+        data = correct_dead_pixels(
+            data, mask,
+            method=cfg.dataset.get('defect_correction', 'median_local'),
+            visualize_sample=False,
+        )
 
     if cfg.dataset.get('offset', 0) > 0:
         data = offset_datacube(data, cfg.dataset.offset)
