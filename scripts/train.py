@@ -18,6 +18,7 @@ from core.preprocessing import (
 )
 from utils.logger import log_results, save_checkpoint, setup_logging
 from utils.opts import get_configuration
+from core.io import load_4dstem
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 use_bf16 = (device.type == "cuda" and torch.cuda.get_device_capability(0)[0] >= 8)
@@ -25,7 +26,9 @@ dtype = torch.bfloat16 if use_bf16 else torch.float16
 
 
 def load_data(cfg, config_path):
-    filepath = config_path.parent / cfg.dataset.data_dir / cfg.dataset.file
+    filepath = Path(cfg.dataset.data_dir) / cfg.dataset.file
+    if not filepath.is_absolute():
+        filepath = Path.cwd() / filepath  # relative to where you run the command    data, metadata = load_4dstem(filepath, crop_N=cfg.dataset.get('crop_N', None))
     data, metadata = load_4dstem(filepath, crop_N=cfg.dataset.get('crop_N', None))
 
     # Preprocessing chain
@@ -93,13 +96,13 @@ def main(cfg, config_path: Path):
         [train_size, val_size],
         generator=torch.Generator().manual_seed(cfg.train.seed),
     )
-
+    n_workers = cfg.train.get('num_workers', 0)
     train_loader = torch.utils.data.DataLoader(
         train_ds, batch_size=cfg.train.batch_size, shuffle=True,
-        num_workers=cfg.train.get('num_workers', 4),
+        num_workers=n_workers,
         pin_memory=(device.type == "cuda"),
-        persistent_workers=(device.type == "cuda"),
-        prefetch_factor=4 if device.type == "cuda" else None,
+        persistent_workers=(n_workers > 0 and device.type == "cuda"),
+        prefetch_factor=4 if n_workers > 0 else None,
     )
     valid_loader = torch.utils.data.DataLoader(
         valid_ds, batch_size=cfg.train.batch_size, shuffle=False,
@@ -206,7 +209,17 @@ def main(cfg, config_path: Path):
 
 
 if __name__ == "__main__":
-    config_path = Path(__file__).with_name("config.yml").resolve()
+    import argparse as ap
+    import sys
+
+    parser = ap.ArgumentParser()
+    parser.add_argument("--config", type=str, default="configs/config.yml")
+    cli_args, remaining = parser.parse_known_args()
+
+    # Remove --config from sys.argv so get_configuration doesn't choke
+    sys.argv = [sys.argv[0]] + remaining
+
+    config_path = Path(cli_args.config).resolve()
     config = get_configuration(config_path)
 
     if device.type == "cuda":
