@@ -33,18 +33,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 def load_data(cfg, config_path):
     """Load and preprocess data (same pipeline as training)."""
     filepath = config_path.parent / cfg.dataset.data_dir / cfg.dataset.file
-
-    if str(filepath).endswith('.npy'):
-        data = np.load(filepath).astype(np.float32)
-    else:
-        import h5py
-        with h5py.File(filepath, 'r') as f:
-            for key in ['Experiments/__unnamed__/data/', 'data', 'datacube']:
-                if key in f:
-                    data = np.array(f[key], dtype=np.float32)
-                    break
-            else:
-                raise KeyError(f"No data found in {filepath}. Keys: {list(f.keys())}")
+    data, metadata = load_4dstem(filepath, crop_N=cfg.dataset.get('crop_N', None))
 
     # Must match training preprocessing exactly
     if cfg.dataset.get('bin_factor', 1) > 1:
