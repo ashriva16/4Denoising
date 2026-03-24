@@ -111,8 +111,9 @@ def main(cfg, config_path: Path):
 
     # MODEL SETUP ------------------------------------------------------
     model, optimizer = load_model(cfg)
-    if device.type == "cuda":
-        model = cast(torch.nn.Module, torch.compile(model, mode="reduce-overhead"))
+    # Uncomment for Linux. Does not work on Windows
+    #if device.type == "cuda":
+    #    model = cast(torch.nn.Module, torch.compile(model, mode="reduce-overhead"))
     model.name = cfg.model.name
 
     # LOSS FUNCTION ----------------------------------------------------
