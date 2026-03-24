@@ -99,10 +99,15 @@ def detect_dead_pixels(datacube, method='statistical', threshold_factor=3.0,
     """
     
     # Handle py4DSTEM DataCube
-    if hasattr(datacube, 'data'):
-        data = datacube.data
+    if isinstance(datacube, np.ndarray):
+        data = datacube.copy()
+        is_datacube = False
+    elif hasattr(datacube, 'data') and isinstance(datacube.data, np.ndarray):
+        data = datacube.data.copy()
+        is_datacube = True
     else:
-        data = datacube
+        data = np.array(datacube).copy()
+        is_datacube = False
     
     Rx, Ry, Qx, Qy = data.shape
     print(f"Detecting dead pixels in {Qx}×{Qy} detector array...")
@@ -248,11 +253,14 @@ def correct_dead_pixels(datacube, dead_pixel_mask, method='median_local',
     """
     
     # Handle py4DSTEM DataCube
-    if hasattr(datacube, 'data'):
+    if isinstance(datacube, np.ndarray):
+        data = datacube.copy()
+        is_datacube = False
+    elif hasattr(datacube, 'data') and isinstance(datacube.data, np.ndarray):
         data = datacube.data.copy()
         is_datacube = True
     else:
-        data = datacube.copy()
+        data = np.array(datacube).copy()
         is_datacube = False
     
     Rx, Ry, Qx, Qy = data.shape
