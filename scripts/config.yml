@@ -1,37 +1,34 @@
 dataset:
-  # location must be relative to config file
-  # data_dir: "../../data/raw/"
-  # file: "4D-STEM_data_for_theophylline/20220711_182642_data_150kX_binned2.hdf5"
-  data_dir: "../../data/processed/"
-  file: "p-terphenyl_20_heavy-noise.hdf5"
-  samplershape: "5l"
-
-train:
-  num_epochs: 1
-  batch_size: 1
-  lr: 0.0001
-  milestones: [15, 30, 40]
-  gamma: 0.5
-  val_split: 0.3
-  seed: 314
-  checkpoint: 1
-  finetune_patterns: ["dec1", "nin_"]
-
-validate:
-  batch_size: 1
-  max_batch: 2
+  data_dir: data
+  file: sample.hdf5
+  neighbor_mode: alternating_spatial   # NEW
+  bin_factor: 2                        # NEW: 1 = no binning
+  offset: 0                            # NEW: 0 = no counts offset
+  defect_mask: true                    # NEW
+  defect_sigma: 2.5                    # NEW
+  image_size: null                     # NEW: null = no crop
 
 model:
-  name: "blind-video-net-4"
+  name: blind-video-net-5d-cross       # 9ch, 4 groups, shift2
+  unet: original                       # NEW: original/blur/deep/deep_blur
   channels: 1
   out_channels: 1
   bias: false
   normal: false
   blind_noise: false
 
-output:
-  # location must be relative to config file
-  save_dir: "../../results"
-  filename: "best_model.pt"
+train:
+  lr: 1.0e-4
+  loss: poisson_nll                    # NEW: mse/log_mse/poisson_nll/weighted_poisson_nll
+  scheduler: cosine                    # NEW: multistep or cosine
+  num_epochs: 50
+  batch_size: 4
+  val_split: 0.15
+  seed: 314
+  milestones: [15, 30, 40]
+  gamma: 0.5
+  checkpoint: 1
+  num_workers: 0                       # NEW
 
-pre_train_path: "../../results/blind-video-net-4/run0/best_model.pth"
+output:
+  save_dir: checkpoints/exp01
