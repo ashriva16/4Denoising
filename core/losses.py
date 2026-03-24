@@ -1,3 +1,6 @@
+import torch
+import torch.nn.functional as F
+
 """
 Loss functions for sparse electron counting data.
 
