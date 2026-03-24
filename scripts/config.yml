@@ -1,11 +1,14 @@
 dataset:
   data_dir: data
   file: sample.hdf5
+  crop_N: 0                            # NEW: detector edge crop (null = none)  
   neighbor_mode: alternating_spatial   # NEW
   bin_factor: 2                        # NEW: 1 = no binning
   offset: 0                            # NEW: 0 = no counts offset
   defect_mask: true                    # NEW
+  defect_method: combined              # NEW: statistical / zero_count / combined
   defect_sigma: 2.5                    # NEW
+  defect_correction: median_local      # NEW: median_local / interpolate
   image_size: null                     # NEW: null = no crop
 
 model:
