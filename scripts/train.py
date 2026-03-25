@@ -19,6 +19,7 @@ from core.preprocessing import (
 from utils.logger import log_results, save_checkpoint, setup_logging
 from utils.opts import get_configuration
 from core.io import load_4dstem
+import logging
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 use_bf16 = (device.type == "cuda" and torch.cuda.get_device_capability(0)[0] >= 8)
@@ -28,7 +29,7 @@ dtype = torch.bfloat16 if use_bf16 else torch.float16
 def load_data(cfg, config_path):
     filepath = Path(cfg.dataset.data_dir) / cfg.dataset.file
     if not filepath.is_absolute():
-        filepath = Path.cwd() / filepath  # relative to where you run the command    data, metadata = load_4dstem(filepath, crop_N=cfg.dataset.get('crop_N', None))
+        filepath = Path.cwd() / filepath  # relative to where you run the command
     data, metadata = load_4dstem(filepath, crop_N=cfg.dataset.get('crop_N', None))
 
     # Preprocessing chain
@@ -76,7 +77,7 @@ def load_model(cfg):
     return model, optimizer
 
 
-def main(cfg, config_path: Path):
+def main(cfg, config_path: Path, cli_args):
     torch.manual_seed(cfg.train.seed)
 
     # DATA SETUP -------------------------------------------------------
@@ -111,7 +112,6 @@ def main(cfg, config_path: Path):
 
     # MODEL SETUP ------------------------------------------------------
     model, optimizer = load_model(cfg)
-    # Uncomment for Linux. Does not work on Windows
     #if device.type == "cuda":
     #    model = cast(torch.nn.Module, torch.compile(model, mode="reduce-overhead"))
     model.name = cfg.model.name
@@ -135,17 +135,51 @@ def main(cfg, config_path: Path):
             optimizer, milestones=cfg.train.milestones, gamma=cfg.train.gamma
         )
 
-    # LOGGING ----------------------------------------------------------
-    log_root = (config_path.parent / cfg.output.save_dir).resolve()
-    log_root.mkdir(parents=True, exist_ok=True)
-    args_for_logger = argparse.Namespace(model=cfg.model.name, **cfg.train)
-    logger = setup_logging(args_for_logger, model, str(log_root) + "/")
-    save_checkpoint(model, optimizer, scheduler, 0, args_for_logger.log_path, hparams=cfg)
+    # LOGGING + RESUME -------------------------------------------------
+    if cli_args.resume:
+        resume_path = Path(cli_args.resume).parent.resolve()
+        args_for_logger = argparse.Namespace(model=cfg.model.name, **cfg.train)
+        args_for_logger.log_path = str(resume_path) + "/"
+
+        # Load checkpoint FIRST
+        ckpt = torch.load(cli_args.resume, map_location=device, weights_only=False)
+        model.load_state_dict(ckpt['model'])
+        optimizer.load_state_dict(ckpt['optimizer'])
+        if 'scheduler' in ckpt:
+            scheduler.load_state_dict(ckpt['scheduler'])
+        start_epoch = ckpt.get('epoch', 0)
+        best_loss = ckpt.get('best_loss', float("inf"))
+
+        # THEN set up logging
+        handler = logging.FileHandler(str(resume_path / "train.log"), mode='a')
+        handler.setLevel(logging.DEBUG)
+        handler.setFormatter(logging.Formatter(
+            "%(asctime)-15s %(levelname)-8s %(name)s:%(lineno)d \n%(message)s\n"
+        ))
+        file_logger = logging.getLogger("4denoising.resume")
+        file_logger.setLevel(logging.DEBUG)
+        file_logger.addHandler(handler)
+
+        from torch.utils.tensorboard import SummaryWriter
+        writer = SummaryWriter(log_dir=str(resume_path / "tb"))
+
+        logger = {"tb": writer, "file": file_logger}
+        file_logger.info(f"=== Resumed from epoch {start_epoch} ===")
+
+        print(f"Resumed from epoch {start_epoch}, best_loss={best_loss:.6f}")
+        print(f"Saving to: {args_for_logger.log_path}")
+    else:
+        # Fresh training — setup_logging creates new runN folder
+        log_root = (Path.cwd() / getattr(cfg.output, 'save_dir', 'checkpoints')).resolve()
+        log_root.mkdir(parents=True, exist_ok=True)
+        args_for_logger = argparse.Namespace(model=cfg.model.name, **cfg.train)
+        logger = setup_logging(args_for_logger, model, str(log_root) + "/")
+        save_checkpoint(model, optimizer, scheduler, 0, args_for_logger.log_path, hparams=cfg)
+        start_epoch = 0
+        best_loss = float("inf")
 
     # BEGIN TRAINING ---------------------------------------------------
-    best_loss = float("inf")
-
-    for epoch in tqdm(range(cfg.train.num_epochs), desc="Epochs",
+    for epoch in tqdm(range(start_epoch, cfg.train.num_epochs), desc="Epochs",
                       leave=True, dynamic_ncols=True):
 
         # Alternating neighbor mode
@@ -196,10 +230,12 @@ def main(cfg, config_path: Path):
             if current_loss < best_loss:
                 best_loss = current_loss
                 save_checkpoint(model, optimizer, scheduler, epoch + 1,
-                                args_for_logger.log_path, best=True, hparams=cfg)
+                                args_for_logger.log_path, best=True, hparams=cfg,
+                                best_loss=best_loss)
 
             save_checkpoint(model, optimizer, scheduler, epoch + 1,
-                            args_for_logger.log_path, hparams=cfg)
+                            args_for_logger.log_path, hparams=cfg,
+                            best_loss=best_loss)
             log_results(logger, {"train": train_mean, "validation": current_loss},
                         epoch + 1)
             logger["file"].info(f"Learning rate: {optimizer.param_groups[0]['lr']}")
@@ -215,6 +251,7 @@ if __name__ == "__main__":
 
     parser = ap.ArgumentParser()
     parser.add_argument("--config", type=str, default="configs/config.yml")
+    parser.add_argument("--resume", type=str, default=None, help="Path to checkpoint to resume from")
     cli_args, remaining = parser.parse_known_args()
 
     # Remove --config from sys.argv so get_configuration doesn't choke
@@ -228,4 +265,4 @@ if __name__ == "__main__":
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-    main(config, config_path)
+    main(config, config_path, cli_args)
