@@ -16,7 +16,7 @@
 # Unsupervised Deep Denoising for High-Dimensional Microscopy Data
 
 **Authors:**
-Leonardo Cancellara¹ · William Talbott² · **Ankit Shrivastava³** · Jordi Weingard² · Dingqiao Ji¹ · Ian MacLaren⁴
+Leonardo Cancellara¹ · William Talbott² · Ankit Shrivastava³ · Jordi Weingard² · Dingqiao Ji¹ · Ian MacLaren⁴
 
 ¹ Max Planck Institute of Colloids and Interfaces
 ² University of Manchester
@@ -60,17 +60,17 @@ cd 4Denoising
 
     ```bash
     git pull        # get latest code + updated requirements.txt
-    make install    # refresh dependencies inside .venv
+    make install    # refresh dependencies inside .venv #UPDATE DEPENDENCIES!
     ```
 
 - **Usage**
 
     ```sh
     source .venv/bin/activate
-    python -m scripts.train # to train model from scratch
-    python -m scripts.eval # to evaluate trained model
-    python -m scripts.run_pretrain # to run pretrained UDVD model, see references
-    python -m scripts.finetune # to finetune pretrained trained model
+    python -m scripts.train --config configs/config.yml # to train model from scratch
+    python -m scripts.infer --config configs/config.yml --checkpoint checkpoints\TiO2\002\blind-video-net-5d-cross\run0\checkpoint_50.pth --output results/denoised.h5 # to evaluate trained model
+    # NEEDS TO BE REWRITTEN python -m scripts.run_pretrain # to run pretrained UDVD model, see references
+    # NEEDS TO BE REWRITTEN python -m scripts.finetune # to finetune pretrained trained model
     ```
 
 ---
