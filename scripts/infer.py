@@ -35,28 +35,28 @@ def load_data(cfg, config_path):
     """Load and preprocess data (same pipeline as training)."""
     filepath = Path(cfg.dataset.data_dir) / cfg.dataset.file
     if not filepath.is_absolute():
-        filepath = Path.cwd() / filepath  # relative to where you run the command    data, metadata = load_4dstem(filepath, crop_N=cfg.dataset.get('crop_N', None))
-    data, metadata = load_4dstem(filepath, crop_N=cfg.dataset.get('crop_N', None))
+        filepath = Path.cwd() / filepath  # relative to where you run the command 
+    data, metadata = load_4dstem(filepath, crop_N=getattr(cfg.dataset,'crop_N', None))
 
     # Must match training preprocessing exactly
-    if cfg.dataset.get('bin_factor', 1) > 1:
+    if getattr(cfg.dataset,'bin_factor', 1) > 1:
         data = bin_datacube(data, cfg.dataset.bin_factor)
 
-    if cfg.dataset.get('defect_mask', False):
+    if getattr(cfg.dataset,'defect_mask', False):
         mask, stats = detect_dead_pixels(
             data,
-            method=cfg.dataset.get('defect_method', 'combined'),
-            threshold_factor=cfg.dataset.get('defect_sigma', 5),
-            min_dead_fraction=cfg.dataset.get('defect_dead_fraction', 0.8),
+            method=getattr(cfg.dataset,'defect_method', 'combined'),
+            threshold_factor=getattr(cfg.dataset,'defect_sigma', 5),
+            min_dead_fraction=getattr(cfg.dataset,'defect_dead_fraction', 0.8),
             visualize=False,
         )
         data = correct_dead_pixels(
             data, mask,
-            method=cfg.dataset.get('defect_correction', 'median_local'),
+            method=getattr(cfg.dataset,'defect_correction', 'median_local'),
             visualize_sample=False,
         )
 
-    if cfg.dataset.get('offset', 0) > 0:
+    if getattr(cfg.dataset,'offset', 0) > 0:
         data = offset_datacube(data, cfg.dataset.offset)
 
     print(f"Data ready: {data.shape}, range [{data.min():.2f}, {data.max():.2f}]")
@@ -64,7 +64,6 @@ def load_data(cfg, config_path):
 
 
 def load_model_from_checkpoint(checkpoint_path, cfg):
-    """Load model architecture from config and weights from checkpoint."""
     unet_cls = get_unet(cfg.model.get('unet', 'original'))
 
     args = argparse.Namespace(
@@ -78,16 +77,26 @@ def load_model_from_checkpoint(checkpoint_path, cfg):
     )
     model = models.build_model(args).to(device)
 
-    checkpoint = torch.load(checkpoint_path, map_location=device)
-    model.load_state_dict(checkpoint['model_state_dict'])
+    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+
+    # Handle different checkpoint formats
+    if 'model_state_dict' in checkpoint:
+        state_dict = checkpoint['model_state_dict']
+    elif 'model' in checkpoint and isinstance(checkpoint['model'], dict):
+        state_dict = checkpoint['model']
+    elif isinstance(checkpoint, dict) and any('weight' in k for k in checkpoint):
+        state_dict = checkpoint  # raw state_dict
+    else:
+        raise KeyError(f"Cannot find model weights in checkpoint. "
+                       f"Keys: {list(checkpoint.keys())}")
+
+    model.load_state_dict(state_dict)
     model.eval()
 
     epoch = checkpoint.get('epoch', '?')
-    loss = checkpoint.get('loss', '?')
-    neighbor_mode = checkpoint.get('neighbor_mode', 'unknown')
+    loss = checkpoint.get('loss', checkpoint.get('val_loss', '?'))
     print(f"Loaded model: {cfg.model.name} (UNet: {cfg.model.get('unet', 'original')})")
-    print(f"  Checkpoint: epoch {epoch}, loss={loss}")
-    print(f"  Trained with: {neighbor_mode}")
+    print(f"  Checkpoint: epoch {epoch}")
 
     return model, checkpoint
 
@@ -107,8 +116,9 @@ def run_inference(model, data, cfg, upsample_factor=1):
     -------
     denoised : np.ndarray
     """
-    neighbor_mode = cfg.infer.get('neighbor_mode', 'spatial')
+    neighbor_mode = getattr(cfg.infer, 'neighbor_mode', 'spatial')
     inference_dataset = DataSetFromArray(data, neighbor_mode=neighbor_mode)
+    upsample_factor = cfg.dataset.get('upsample_factor', 1)
 
     Rx = inference_dataset.Rx()
     Ry = inference_dataset.Ry()
@@ -181,7 +191,7 @@ def postprocess(denoised, original_data, cfg):
     result = denoised.copy()
 
     # Remove +1 offset if it was applied during training
-    offset = cfg.dataset.get('offset', 0)
+    offset = getattr(cfg.dataset,'offset', 0)
     if offset > 0:
         result = remove_offset(result, offset)
         print(f"Removed +{offset} offset")
@@ -199,40 +209,36 @@ def postprocess(denoised, original_data, cfg):
     return result
 
 
-def main(args):
-    # Load config from training
-    config_path = Path(args.config).resolve()
-    cfg = get_configuration(config_path)
-
-    # Override inference-specific settings from CLI
-    if not hasattr(cfg, 'infer'):
-        cfg.infer = argparse.Namespace()
-    if args.neighbor_mode:
-        cfg.infer.neighbor_mode = args.neighbor_mode
-    elif not hasattr(cfg.infer, 'neighbor_mode'):
-        cfg.infer.neighbor_mode = 'spatial'
-
+def main(cli_args, cfg, config_path):
     # Load and preprocess data (same pipeline as training)
     data = load_data(cfg, config_path)
 
     # Also load the data BEFORE offset for bias correction
     original_data = data.copy()
-    offset = cfg.dataset.get('offset', 0)
+    offset = getattr(cfg.dataset,'offset', 0)
     if offset > 0:
-        original_data = original_data - offset  # undo offset for bias reference
+        original_data = original_data - offset
+
+    # Override inference settings from CLI
+    if not hasattr(cfg, 'infer'):
+        cfg.infer = argparse.Namespace()
+    if cli_args.neighbor_mode:
+        cfg.infer.neighbor_mode = cli_args.neighbor_mode
+    elif not hasattr(cfg.infer, 'neighbor_mode'):
+        cfg.infer.neighbor_mode = 'spatial'
 
     # Load model
-    model, checkpoint = load_model_from_checkpoint(args.checkpoint, cfg)
+    model, checkpoint = load_model_from_checkpoint(cli_args.checkpoint, cfg)
 
     # Run inference
-    upsample = args.upsample or cfg.infer.get('upsample', 1)
+    upsample = cli_args.upsample or getattr(cfg.infer, 'upsample_factor', 1) or 1
     denoised_raw = run_inference(model, data, cfg, upsample_factor=upsample)
 
     # Post-process
     denoised = postprocess(denoised_raw, original_data, cfg)
 
     # Save
-    output_path = args.output
+    output_path = cli_args.output
     os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
 
     if output_path.endswith(('.h5', '.hdf5')):
@@ -247,11 +253,11 @@ def main(args):
     print(f"INFERENCE SUMMARY")
     print(f"{'='*60}")
     print(f"  Model:          {cfg.model.name} (UNet: {cfg.model.get('unet', 'original')})")
-    print(f"  Checkpoint:     {args.checkpoint}")
+    print(f"  Checkpoint:     {cli_args.checkpoint}")
     print(f"  Neighbor mode:  {cfg.infer.neighbor_mode}")
     print(f"  Loss (train):   {cfg.train.get('loss', 'mse')}")
-    print(f"  Bin factor:     {cfg.dataset.get('bin_factor', 1)}")
-    print(f"  Offset:         {cfg.dataset.get('offset', 0)}")
+    print(f"  Bin factor:     {getattr(cfg.dataset,'bin_factor', 1)}")
+    print(f"  Offset:         {getattr(cfg.dataset,'offset', 0)}")
     print(f"  Upsample:       {upsample}x")
     print(f"  Output:         {output_path}")
     print(f"  Output shape:   {denoised.shape}")
@@ -259,40 +265,23 @@ def main(args):
     print(f"{'='*60}")
 
 
-def get_args():
-    p = argparse.ArgumentParser(description="UDVD-MF 4D-STEM inference")
-
-    p.add_argument("--config", required=True,
-                   help="Path to config.yml (same one used for training)")
-    p.add_argument("--checkpoint", required=True,
-                   help="Path to .pth checkpoint file")
-    p.add_argument("--output", default="results/denoised.h5",
-                   help="Output path (.h5 for compressed HDF5, .npy for numpy)")
-    p.add_argument("--neighbor-mode", default=None, choices=["spatial", "temporal"],
-                   help="Override inference neighbor mode (default: from config)")
-    p.add_argument("--upsample", type=int, default=None,
-                   help="Bicubic upsample factor after denoising (e.g. 2 to undo 2×2 binning)")
-
-    return p.parse_args()
-
-
 if __name__ == "__main__":
-    import argparse as ap
     import sys
 
-    parser = ap.ArgumentParser()
+    parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, default="configs/config.yml")
+    parser.add_argument("--checkpoint", required=True)
+    parser.add_argument("--output", default="results/denoised.h5")
+    parser.add_argument("--neighbor-mode", default=None, choices=["spatial", "temporal"])
+    parser.add_argument("--upsample", type=int, default=None)
     cli_args, remaining = parser.parse_known_args()
 
-    # Remove --config from sys.argv so get_configuration doesn't choke
+    # Clear sys.argv so get_configuration doesn't choke
     sys.argv = [sys.argv[0]] + remaining
 
     config_path = Path(cli_args.config).resolve()
-    config = get_configuration(config_path)
+    cfg = get_configuration(config_path)
 
-    if device.type == "cuda":
-        torch.cuda.manual_seed_all(config.train.seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-
-    main(config, config_path)
+    # Pass CLI args into main
+    cli_args.config = str(config_path)
+    main(cli_args, cfg, config_path)
