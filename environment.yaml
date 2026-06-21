@@ -1,0 +1,21 @@
+# environment.yaml
+name: 4Denoising
+channels:
+  - conda-forge
+  - defaults
+
+dependencies:
+  - python=3.11
+  - numpy
+  - scipy
+  - h5py
+  - scikit-image
+  - tensorboard
+  - matplotlib
+  - tqdm
+  - pip
+
+  - pip:
+    - ruamel.yaml
+    - py4DSTEM
+    - opencv-python
