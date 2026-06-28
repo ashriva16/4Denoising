@@ -208,6 +208,14 @@ __marimo__/
 
 docs/source/api/*
 
+# OS/local artifacts
+.DS_Store
+
+# Large local data artifacts
+*.zip
+*.h5
+*.hdf5
+
 # Ignore everything inside data/ and results/
 
 # Allow directory traversal so negations work

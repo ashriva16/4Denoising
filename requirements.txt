@@ -79,6 +79,8 @@ idna==3.11
     #   httpx
     #   jsonschema
     #   requests
+imageio==2.37.3
+    # via scikit-image
 ipykernel==7.1.0
     # via jupyterlab
 ipython==9.8.0
@@ -143,6 +145,8 @@ kiwisolver==1.4.9
     # via matplotlib
 lark==1.3.1
     # via rfc3987-syntax
+lazy-loader==0.5
+    # via scikit-image
 markdown==3.10
     # via tensorboard
 markupsafe==3.0.3
@@ -183,44 +187,44 @@ numpy==2.3.5
     #   mic-hackathon-2025 (pyproject.toml)
     #   tensorboard
     #   torchvision
-nvidia-cublas-cu12==12.8.4.1
+nvidia-cublas-cu12==12.8.4.1; platform_system == "Linux"
     # via
     #   nvidia-cudnn-cu12
     #   nvidia-cusolver-cu12
     #   torch
-nvidia-cuda-cupti-cu12==12.8.90
+nvidia-cuda-cupti-cu12==12.8.90; platform_system == "Linux"
     # via torch
-nvidia-cuda-nvrtc-cu12==12.8.93
+nvidia-cuda-nvrtc-cu12==12.8.93; platform_system == "Linux"
     # via torch
-nvidia-cuda-runtime-cu12==12.8.90
+nvidia-cuda-runtime-cu12==12.8.90; platform_system == "Linux"
     # via torch
-nvidia-cudnn-cu12==9.10.2.21
+nvidia-cudnn-cu12==9.10.2.21; platform_system == "Linux"
     # via torch
-nvidia-cufft-cu12==11.3.3.83
+nvidia-cufft-cu12==11.3.3.83; platform_system == "Linux"
     # via torch
-nvidia-cufile-cu12==1.13.1.3
+nvidia-cufile-cu12==1.13.1.3; platform_system == "Linux"
     # via torch
-nvidia-curand-cu12==10.3.9.90
+nvidia-curand-cu12==10.3.9.90; platform_system == "Linux"
     # via torch
-nvidia-cusolver-cu12==11.7.3.90
+nvidia-cusolver-cu12==11.7.3.90; platform_system == "Linux"
     # via torch
-nvidia-cusparse-cu12==12.5.8.93
+nvidia-cusparse-cu12==12.5.8.93; platform_system == "Linux"
     # via
     #   nvidia-cusolver-cu12
     #   torch
-nvidia-cusparselt-cu12==0.7.1
+nvidia-cusparselt-cu12==0.7.1; platform_system == "Linux"
     # via torch
-nvidia-nccl-cu12==2.27.5
+nvidia-nccl-cu12==2.27.5; platform_system == "Linux"
     # via torch
-nvidia-nvjitlink-cu12==12.8.93
+nvidia-nvjitlink-cu12==12.8.93; platform_system == "Linux"
     # via
     #   nvidia-cufft-cu12
     #   nvidia-cusolver-cu12
     #   nvidia-cusparse-cu12
     #   torch
-nvidia-nvshmem-cu12==3.3.20
+nvidia-nvshmem-cu12==3.3.20; platform_system == "Linux"
     # via torch
-nvidia-nvtx-cu12==12.8.90
+nvidia-nvtx-cu12==12.8.90; platform_system == "Linux"
     # via torch
 packaging==25.0
     # via
@@ -313,6 +317,10 @@ six==1.17.0
     # via
     #   python-dateutil
     #   rfc3339-validator
+scikit-image==0.25.2
+    # via mic-hackathon-2025 (pyproject.toml)
+scipy==1.17.1
+    # via scikit-image
 soupsieve==2.8.1
     # via beautifulsoup4
 stack-data==0.6.3
@@ -329,11 +337,15 @@ terminado==0.18.1
     #   jupyter-server-terminals
 tinycss2==1.4.0
     # via bleach
+tifffile==2026.3.3
+    # via scikit-image
 torch==2.9.1
     # via torchvision
 torchinfo==1.8.0
     # via mic-hackathon-2025 (pyproject.toml)
 torchvision==0.24.1
+    # via mic-hackathon-2025 (pyproject.toml)
+tqdm==4.67.1
     # via mic-hackathon-2025 (pyproject.toml)
 tornado==6.5.4
     # via
@@ -355,7 +367,7 @@ traitlets==5.14.3
     #   nbclient
     #   nbconvert
     #   nbformat
-triton==3.5.1
+triton==3.5.1; platform_system == "Linux"
     # via torch
 typing-extensions==4.15.0
     # via

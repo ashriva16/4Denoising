@@ -16,7 +16,7 @@ UNET_REGISTRY = {}
 def register_model(name):
     def register_fn(cls):
         if name in MODEL_REGISTRY:
-            raise ValueError(f"Cannot register duplicate model: {name}")
+            return cls
         if not issubclass(cls, nn.Module):
             raise ValueError(f"Model {name} must extend nn.Module")
         MODEL_REGISTRY[name] = cls

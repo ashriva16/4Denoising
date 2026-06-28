@@ -1,16 +1,19 @@
 # Makefile: simple .venv workflow for users (not developers)
 
-VENV_DIR := .venv
-PYTHON   ?= python3
-PIP      := $(VENV_DIR)/bin/pip
+VENV_DIR    := .venv
+PYTHON      ?= python3.11
+VENV_PYTHON := $(VENV_DIR)/bin/python
+PIP         := $(VENV_DIR)/bin/pip
 
-.PHONY: help env install clean
+.PHONY: help env install dev test clean
 
 ## Show available commands for users
 help:
 	@echo "Commands for using this project:"
 	@echo "  make env       - create $(VENV_DIR) and install dependencies"
 	@echo "  make install   - reinstall/update dependencies into existing $(VENV_DIR)"
+	@echo "  make dev       - install this project with test/development tools"
+	@echo "  make test      - run the pytest smoke-test suite"
 	@echo "  make clean     - remove cache/build artifacts (keep $(VENV_DIR))"
 
 ## Create a new virtual environment and install dependencies
@@ -41,6 +44,23 @@ install:
 		$(PIP) install -r requirements.txt; \
 	else \
 		echo "No requirements.txt found. Nothing to install."; \
+	fi
+
+## Install project plus development/test dependencies into existing .venv
+dev:
+	@if [ ! -d "$(VENV_DIR)" ]; then \
+		echo "No $(VENV_DIR) found. Run 'make env' first."; \
+		exit 1; \
+	fi
+	@echo ">>> Installing project with development/test dependencies"
+	@$(PIP) install -e ".[dev]"
+
+## Run the quick smoke-test suite
+test:
+	@if [ -x "$(VENV_PYTHON)" ]; then \
+		$(VENV_PYTHON) -m pytest; \
+	else \
+		$(PYTHON) -m pytest; \
 	fi
 
 ## Light clean: keep .venv, remove caches/build and notebook junk

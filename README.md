@@ -82,6 +82,12 @@ Feel free to contact me for issues.
 
 ---
 
+## 🛠️ Development
+
+Contributor setup, tests, and packaging notes are in [development.md](development.md).
+
+---
+
 ## 📜 License
 
 This project is licensed under the [MIT License](https://opensource.org/licenses/MIT). See the `LICENSE` file for full details.
@@ -90,8 +96,5 @@ This project is licensed under the [MIT License](https://opensource.org/licenses
 
 ## 📘 References
 
-- [Cookiecutter Docs](https://cookiecutter.readthedocs.io)
-- [PEP 621](https://peps.python.org/pep-0621/)
-- [GitHub Actions](https://docs.github.com/en/actions)
 - https://github.com/crozier-del/UDVD-MF-Denoising/tree/v1.0?tab=readme-ov-file
 - https://github.com/sreyas-mohan/udvd

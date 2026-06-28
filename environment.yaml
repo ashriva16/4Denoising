@@ -19,3 +19,6 @@ dependencies:
     - ruamel.yaml
     - py4DSTEM
     - opencv-python
+    - torch
+    - torchvision
+    - torchinfo
