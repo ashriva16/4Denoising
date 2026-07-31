@@ -28,12 +28,9 @@ Leonardo Cancellara¹ · William Talbott² · Ankit Shrivastava³ · Jordi Weing
 This repository implements an unsupervised deep-learning framework for denoising high-dimensional microscopy data, with a primary focus on 4D-STEM.
 The approach is based on UDVD (Unsupervised Deep Video Denoising), a UNet-based convolutional neural network that exploits structural similarity between neighboring frames without requiring any ground-truth clean data.
 
-Originally developed for time-series video denoising, UDVD is generalized here to multidimensional microscopy datasets by replacing temporal adjacency with geometric-flow connectivity in real space. This enables pixel-wise denoising of diffraction patterns using spatially adjacent scan positions.
+Originally developed for time-series video denoising, UDVD is generalized here to multidimensional microscopy datasets by replacing temporal adjacency with geometric-flow connectivity in real space, and the MSE loss function with the Poisson NLL. This enables denoising of sparse diffraction patterns with high dynamic range, using spatially adjacent scan positions to predict pixel-wise intensities via a blindspot algorithm.
 
-![flow chart](docs/flowchart.png)
-
-## Youtube link
-[![Watch explanation](https://img.youtube.com/vi/NVjtHF1Ujv0/maxresdefault.jpg)](https://www.youtube.com/watch?v=NVjtHF1Ujv0)
+![flow chart](docs/flowchart_TiO2.png)
 
 ---
 
