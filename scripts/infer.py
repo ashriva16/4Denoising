@@ -20,6 +20,10 @@ from tqdm.auto import tqdm
 import core.models as models
 from core.models import get_unet
 from core.dataloader import DataSetFromArray
+import datetime
+import json
+
+from core.checkpoints import check_compatible, extract_state_dict, file_digest, resolve_policy
 from core.data_setup import load_training_data
 from core.preprocessing import correct_pnll_bias, remove_offset, save_denoised_h5
 from utils.opts import get_configuration
@@ -40,7 +44,7 @@ def load_data(cfg, config_path, source=0):
     data = cubes[i]
     print(f"Data ready: source {labels[i]} {data.shape}, "
           f"range [{data.min():.2f}, {data.max():.2f}]")
-    return data, labels[i]
+    return data, labels[i], infos[i]
 
 
 def load_model_from_checkpoint(checkpoint_path, cfg):
@@ -59,18 +63,7 @@ def load_model_from_checkpoint(checkpoint_path, cfg):
 
     checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
 
-    # Handle different checkpoint formats
-    if 'model_state_dict' in checkpoint:
-        state_dict = checkpoint['model_state_dict']
-    elif 'model' in checkpoint and isinstance(checkpoint['model'], dict):
-        state_dict = checkpoint['model']
-    elif isinstance(checkpoint, dict) and any('weight' in k for k in checkpoint):
-        state_dict = checkpoint  # raw state_dict
-    else:
-        raise KeyError(f"Cannot find model weights in checkpoint. "
-                       f"Keys: {list(checkpoint.keys())}")
-
-    model.load_state_dict(state_dict)
+    model.load_state_dict(extract_state_dict(checkpoint))   # any checkpoint layout
     model.eval()
 
     epoch = checkpoint.get('epoch', '?')
@@ -191,7 +184,7 @@ def postprocess(denoised, original_data, cfg):
 
 def main(cli_args, cfg, config_path):
     # Load and preprocess data (same pipeline as training)
-    data, source_label = load_data(cfg, config_path, source=cli_args.source)
+    data, source_label, data_info = load_data(cfg, config_path, source=cli_args.source)
 
     # Also load the data BEFORE offset for bias correction
     original_data = data.copy()
@@ -207,8 +200,12 @@ def main(cli_args, cfg, config_path):
     elif not hasattr(cfg.infer, 'neighbor_mode'):
         cfg.infer.neighbor_mode = 'spatial'
 
-    # Load model
+    # Load model, and refuse weights trained on differently binned / offset data
     model, checkpoint = load_model_from_checkpoint(cli_args.checkpoint, cfg)
+    policy = resolve_policy(getattr(cli_args, 'domain_policy', None), cfg)
+    domain_shift = check_compatible(checkpoint.get('provenance'), [data_info],
+                                    offset=getattr(cfg.dataset, 'offset', 0) or 0,
+                                    policy=policy)
 
     # Run inference
     upsample = cli_args.upsample or getattr(cfg.infer, 'upsample_factor', 1) or 1
@@ -227,6 +224,25 @@ def main(cli_args, cfg, config_path):
         np.save(output_path, denoised)
         size_mb = os.path.getsize(output_path) / 1024 / 1024
         print(f"Saved {output_path} ({size_mb:.1f} MB)")
+
+    # Provenance next to the output (moves into the output file in a later step)
+    record = {
+        "created_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "output": str(output_path),
+        "checkpoint": str(cli_args.checkpoint),
+        "checkpoint_digest": file_digest(cli_args.checkpoint),
+        "checkpoint_epoch": checkpoint.get('epoch'),
+        "weights_provenance": checkpoint.get('provenance'),
+        "data": data_info,
+        "domain_policy": policy,
+        "domain_shift": domain_shift,
+        "inference": {"neighbor_mode": cfg.infer.neighbor_mode, "upsample": upsample},
+    }
+    with open(str(output_path) + ".provenance.json", "w", encoding="utf-8") as f:
+        json.dump(record, f, indent=1, default=str)
+    if domain_shift:
+        print(f"  NOTE: {len(domain_shift)} difference(s) from the training data recorded "
+              f"in {output_path}.provenance.json")
 
     # Summary
     print(f"\n{'='*60}")
@@ -257,6 +273,9 @@ if __name__ == "__main__":
     parser.add_argument("--upsample", type=int, default=None)
     parser.add_argument("--source", default="0",
                         help="which dataset.sources entry to denoise (index or label)")
+    parser.add_argument("--domain-policy", choices=["strict", "warn", "off"], default=None,
+                        help="weights trained with other binning/offset: strict = stop "
+                             "(default), warn/off = run and record the differences")
     cli_args, remaining = parser.parse_known_args()
 
     # Clear sys.argv so get_configuration doesn't choke

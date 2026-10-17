@@ -10,6 +10,9 @@ from tqdm.auto import tqdm
 
 import core.models as models
 from core.models import get_unet
+from core.checkpoints import (build_provenance, check_compatible, expected_preprocessing,
+                              extract_state_dict, file_digest, freeze_parameters, load_weights,
+                              resolve_policy)
 from core.data_setup import load_training_data, uses_sources
 from core.dataloader import build_multi_dataset, build_scan_mask, build_training_dataset
 from core.losses import build_loss_fn
@@ -94,6 +97,32 @@ def main(cfg, config_path: Path, cli_args):
     #    model = cast(torch.nn.Module, torch.compile(model, mode="reduce-overhead"))
     model.name = cfg.model.name
 
+    # INITIAL WEIGHTS --------------------------------------------------
+    # scratch (default) | weights: start from given weights with a fresh optimizer
+    # (fine-tuning) | --resume: continue an interrupted run, optimizer included
+    weights = getattr(cli_args, 'weights', None) or cfg.model.get('weights', None)
+    if weights and cli_args.resume:
+        raise ValueError("use either --resume (continue a run) or weights (start from them)")
+    init = {"mode": "scratch"}
+    if weights:
+        parent, source = load_weights(model, weights, map_location=device)
+        policy = resolve_policy(getattr(cli_args, 'domain_policy', None), cfg)
+        shift = check_compatible(parent, data_infos, offset=cfg.dataset.get('offset', 0) or 0,
+                                 policy=policy)
+        init = {"mode": "weights", **source, "domain_policy": policy, "domain_shift": shift,
+                "parent_preprocessing": expected_preprocessing(parent),
+                "parent_data": [d.get("label", d.get("path"))
+                                for d in (parent or {}).get("data", [])]}
+        trainable = cfg.train.get('trainable', None)
+        n_train = freeze_parameters(model, list(trainable) if trainable else None)
+        optimizer = torch.optim.Adam([p for p in model.parameters() if p.requires_grad],
+                                     lr=cfg.train.lr)
+        print(f"Starting from {weights} (epoch {source['from_epoch']}), "
+              f"{n_train} trainable parameters")
+    elif cli_args.resume:
+        init = {"mode": "resume", "from": str(cli_args.resume),
+                "from_digest": file_digest(cli_args.resume)}
+
     # LOSS FUNCTION ----------------------------------------------------
     # weighted_poisson_nll uses the mean pattern; pooled over all sources
     pacbed_data = (cubes[0] if len(cubes) == 1
@@ -116,6 +145,8 @@ def main(cfg, config_path: Path, cli_args):
             optimizer, milestones=cfg.train.milestones, gamma=cfg.train.gamma
         )
 
+    provenance = build_provenance(cfg, data_infos, init)
+
     # LOGGING + RESUME -------------------------------------------------
     if cli_args.resume:
         resume_path = Path(cli_args.resume).parent.resolve()
@@ -124,7 +155,7 @@ def main(cfg, config_path: Path, cli_args):
 
         # Load checkpoint FIRST
         ckpt = torch.load(cli_args.resume, map_location=device, weights_only=False)
-        model.load_state_dict(ckpt['model'])
+        model.load_state_dict(extract_state_dict(ckpt))
         optimizer.load_state_dict(ckpt['optimizer'])
         if 'scheduler' in ckpt:
             scheduler.load_state_dict(ckpt['scheduler'])
@@ -155,7 +186,8 @@ def main(cfg, config_path: Path, cli_args):
         log_root.mkdir(parents=True, exist_ok=True)
         args_for_logger = argparse.Namespace(model=cfg.model.name, **cfg.train)
         logger = setup_logging(args_for_logger, model, str(log_root) + "/")
-        save_checkpoint(model, optimizer, scheduler, 0, args_for_logger.log_path, hparams=cfg)
+        save_checkpoint(model, optimizer, scheduler, 0, args_for_logger.log_path,
+                        hparams=cfg, provenance=provenance)
         start_epoch = 0
         best_loss = float("inf")
 
@@ -213,11 +245,11 @@ def main(cfg, config_path: Path, cli_args):
             if current_loss < best_loss:
                 best_loss = current_loss
                 save_checkpoint(model, optimizer, scheduler, epoch + 1,
-                                args_for_logger.log_path, best=True, hparams=cfg,
+                                args_for_logger.log_path, best=True, hparams=cfg, provenance=provenance,
                                 best_loss=best_loss)
 
             save_checkpoint(model, optimizer, scheduler, epoch + 1,
-                            args_for_logger.log_path, hparams=cfg,
+                            args_for_logger.log_path, hparams=cfg, provenance=provenance,
                             best_loss=best_loss)
             log_results(logger, {"train": train_mean, "validation": current_loss},
                         epoch + 1)
@@ -225,7 +257,7 @@ def main(cfg, config_path: Path, cli_args):
 
     # Final save
     save_checkpoint(model, optimizer, scheduler, int(cfg.train.num_epochs),
-                    args_for_logger.log_path, hparams=cfg)
+                    args_for_logger.log_path, hparams=cfg, provenance=provenance)
 
 
 if __name__ == "__main__":
@@ -235,6 +267,11 @@ if __name__ == "__main__":
     parser = ap.ArgumentParser()
     parser.add_argument("--config", type=str, default="configs/config.yml")
     parser.add_argument("--resume", type=str, default=None, help="Path to checkpoint to resume from")
+    parser.add_argument("--weights", type=str, default=None,
+                        help="start from these weights (fine-tuning); overrides model.weights")
+    parser.add_argument("--domain-policy", choices=["strict", "warn", "off"], default=None,
+                        help="weights trained with other binning/offset: strict = stop "
+                             "(default), warn/off = run and record the differences")
     cli_args, remaining = parser.parse_known_args()
 
     # Remove --config from sys.argv so get_configuration doesn't choke

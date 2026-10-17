@@ -67,7 +67,8 @@ cd 4Denoising
     python -m scripts.train --config configs/config.yml # to train model from scratch
     python -m scripts.infer --config configs/config.yml --checkpoint checkpoints\TiO2\002\blind-video-net-5d-cross\run0\checkpoint_50.pth --output results/denoised.h5 # to evaluate trained model
     # NEEDS TO BE REWRITTEN python -m scripts.run_pretrain # to run pretrained UDVD model, see references
-    # NEEDS TO BE REWRITTEN python -m scripts.finetune # to finetune pretrained trained model
+    python -m scripts.train --config configs/config.yml --weights path/to/checkpoint.pth # start from trained weights (fine-tuning; same as scripts.fine_tune)
+    python -m scripts.train --config configs/config.yml --resume path/to/checkpoint_10.pth # continue an interrupted run
     ```
 
 ---
@@ -106,6 +107,18 @@ builds the dead/hot-pixel mask once, at full detector size, from a reference
 region (detectors and their parameters in the `defects` section), and saves it
 with its provenance. With `dataset.defect_mask_file` set, every dataset is
 inpainted with that same mask while it is read, before any binning.
+
+**Weights and provenance.** Training starts from scratch, from given weights
+(`--weights` or `model.weights`; fresh optimizer, optional `train.trainable` to
+fine-tune only some layers), or resumes a run (`--resume`). Every checkpoint
+stores a `provenance` record: data sources, crops, binning, offset, defect-mask
+digest, where the starting weights came from, code version and git commit,
+software versions and GPU. `scripts.train --weights` and `scripts.infer` compare
+the weights' recorded binning and offset with the data. `--domain-policy`
+(or `dataset.domain_policy`) decides what a mismatch does: `strict` (default)
+stops, `warn` and `off` run and record every difference (key, training value,
+data value) in the provenance of the result, so cross-domain experiments, e.g.
+other binning or camera length, are always labelled as such.
 
 ---
 

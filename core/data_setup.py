@@ -31,6 +31,10 @@ Sources (new): any number of datasets, read through core.readers / core.stream::
       ...
       scan_mask: {mode: all}              # which positions are training targets
 
+A source that was already binned before it was written (e.g. a cache) declares
+it with ``prebinned: {q_bin: 2, r_bin: 8}``; provenance and the weight checks then
+use the total binning relative to the raw data.
+
 Every source must give the same detector shape after binning; scan shapes may
 differ. Per-source keys (``fmt``, ``reader_options``, ``q_crop``) override the
 shared ones.
@@ -107,7 +111,7 @@ def _load_legacy(cfg, verbose):
             min_dead_fraction=_get(ds, "defect_dead_fraction", 0.8), visualize=False)
         data = correct_dead_pixels(data, mask, method=_get(ds, "defect_correction", "median_local"),
                                    visualize_sample=False)
-    info = {"reader": "legacy core.io.load_4dstem", "path": str(rel),
+    info = {"reader": "legacy core.io.load_4dstem", "path": str(rel), "label": rel.stem,
             "q_bin": int(_get(ds, "bin_factor", 1)), "r_bin": 1, **(mask_prov or {})}
     return [data], [rel.stem], [info]
 
@@ -149,6 +153,12 @@ def _load_sources(cfg, verbose):
             reader_options=dict(_get(src, "reader_options", _get(ds, "reader_options", {})) or {}))
         label = str(_get(src, "label", f"{i}:{path.stem}"))
         info["label"] = label
+        pre = _get(src, "prebinned", _get(ds, "prebinned"))
+        if pre:                     # binning applied before this file was written
+            pre = {"q_bin": int(_get(pre, "q_bin", 1)), "r_bin": int(_get(pre, "r_bin", 1))}
+            info["prebinned"] = pre
+            info["q_bin"] = info["q_bin"] * pre["q_bin"]       # totals relative to the
+            info["r_bin"] = info["r_bin"] * pre["r_bin"]       # raw detector and scan
         if mask_prov:
             info.update(mask_prov)
         cubes.append(data)

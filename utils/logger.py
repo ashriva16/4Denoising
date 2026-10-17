@@ -8,8 +8,9 @@ from torch.utils.tensorboard import SummaryWriter
 from torchinfo import summary
 
 
-def save_checkpoint(model, optimizer, scheduler, epoch, save_path, best=False, hparams=None, best_loss=None):
-    """Save model state."""
+def save_checkpoint(model, optimizer, scheduler, epoch, save_path, best=False, hparams=None,
+                    best_loss=None, provenance=None):
+    """Save model state (and, if given, the run's provenance; see core/checkpoints.py)."""
     os.makedirs(save_path, exist_ok=True)
     checkpoint = {
         "model": model.state_dict(),
@@ -19,6 +20,7 @@ def save_checkpoint(model, optimizer, scheduler, epoch, save_path, best=False, h
         "epoch": epoch,
         "initial_hparams": hparams,
         "best_loss": best_loss,
+        "provenance": provenance,
     }
     torch.save(
         checkpoint, os.path.join(save_path, "best_model.pth" if best else f"checkpoint_{epoch}.pth")

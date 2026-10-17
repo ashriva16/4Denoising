@@ -18,6 +18,10 @@ dataset:
       crop_y: [200, 300]
       crop_x: [450, 550]
       label: B
+    # an already-binned file (e.g. a cache written by another workflow):
+    # - path: data/example/cache.h5
+    #   reader_options: {key: series/data, index: 0}
+    #   prebinned: {q_bin: 2, r_bin: 8}    # binning applied before it was written
   fmt: auto                            # arina / h5 / npy / rsciio:<plugin> / auto
   q_bin: 2                             # detector binning, counts summed
   r_bin: 1                             # scan binning, counts summed
@@ -25,6 +29,7 @@ dataset:
     mode: all                          # all / corner / diagonal / checkerboard / file
   neighbor_mode: alternating_spatial
   offset: 0
+  domain_policy: strict                # weights from other binning/offset: strict / warn / off
   defect_mask_file: masks/detector_mask.h5   # built by scripts.make_defect_mask;
                                              # applied at full detector size, before binning
   # without a mask file, the original post-binning detection can be used instead:
@@ -49,6 +54,7 @@ defects:                               # read by scripts.make_defect_mask only
   inpaint: {max_radius: 4, min_donors: 3}
 
 model:
+  weights: null                        # null = train from scratch; or a checkpoint to start from
   name: blind-video-net-5d-cross
   unet: original
   channels: 1
@@ -69,6 +75,7 @@ train:
   gamma: 0.5
   checkpoint: 1
   num_workers: 0
+  # trainable: [nin_A, nin_B, nin_C]   # with weights: train only these layers
 
 output:
   save_dir: checkpoints/example
