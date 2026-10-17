@@ -4,7 +4,8 @@
 #
 #   python -m scripts.make_defect_mask --config configs/config_sources.yml --plot mask.png
 #   python -m scripts.train --config configs/config_sources.yml
-#   python -m scripts.infer --config configs/config_sources.yml --checkpoint <ckpt> --source A
+#   python -m scripts.infer --config configs/config_sources.yml --checkpoint <ckpt> --source A --output results/A.h5
+#   python -m scripts.infer --config configs/config_sources.yml --checkpoint <ckpt> --source all --output results/
 
 dataset:
   sources:                             # paths relative to where you run the command
@@ -79,3 +80,11 @@ train:
 
 output:
   save_dir: checkpoints/example
+
+infer:                                 # scripts.infer; command-line options override these
+  neighbor_mode: spatial
+  edges: copy                          # copy: outer rows/cols copied (as before); denoise
+  batch_size: 16                       # positions per forward pass; halved on GPU out-of-memory
+  block_rows: 8                        # scan rows read and denoised per block
+  out_dtype: auto                      # float16 for .h5, float32 for .npy
+  # upsample_factor: 1

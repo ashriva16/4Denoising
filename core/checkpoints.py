@@ -24,7 +24,7 @@ import sys
 import warnings
 from pathlib import Path
 
-__all__ = ["build_provenance", "extract_state_dict", "load_weights", "file_digest",
+__all__ = ["build_provenance", "runtime_info", "extract_state_dict", "load_weights", "file_digest",
            "check_compatible", "resolve_policy", "expected_preprocessing",
            "freeze_parameters", "IncompatibleWeights", "POLICIES"]
 
@@ -73,6 +73,17 @@ def _device():
     if torch is not None and torch.cuda.is_available():
         return {"type": "cuda", "name": torch.cuda.get_device_name(0)}
     return {"type": "cpu", "name": platform.processor() or platform.machine()}
+
+
+def runtime_info():
+    """Code version, git commit, software versions, host and device of this run."""
+    try:
+        version = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
+    except OSError:
+        version = None
+    return {"created_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "code": {"version": version, **_git()}, "software": _versions(),
+            "host": platform.node(), "device": _device()}
 
 
 def file_digest(path, chunk=1 << 20):

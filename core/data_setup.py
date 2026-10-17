@@ -54,7 +54,8 @@ import numpy as np
 from core.preprocessing import (bin_datacube, correct_dead_pixels, detect_dead_pixels,
                                 offset_datacube)
 
-__all__ = ["load_training_data", "uses_sources"]
+__all__ = ["load_training_data", "uses_sources", "source_specs", "finish_info",
+           "mask_correction"]
 
 
 def _get(d, key, default=None):
@@ -135,37 +136,68 @@ def _mask_correction(ds, verbose):
     return fn, prov
 
 
+def source_specs(cfg):
+    """One dict per dataset.sources entry with everything needed to read it:
+    path, fmt, scan_shape, crops, q_crop, reader_options, prebinned, label,
+    plus the shared q_bin / r_bin. Nothing is opened."""
+    ds = cfg.dataset
+    specs = []
+    for i, src in enumerate(_get(ds, "sources") or []):
+        path = _resolve(_get(src, "path"))
+        pre = _get(src, "prebinned", _get(ds, "prebinned"))
+        specs.append({
+            "label": str(_get(src, "label", f"{i}:{path.stem}")),
+            "path": path,
+            "fmt": _get(src, "fmt", _get(ds, "fmt", "auto")),
+            "scan_shape": _get(src, "scan_shape", _get(ds, "scan_shape")),
+            "crop_y": _get(src, "crop_y"), "crop_x": _get(src, "crop_x"),
+            "q_crop": _get(src, "q_crop", _get(ds, "q_crop")),
+            "q_bin": int(_get(ds, "q_bin", 1)), "r_bin": int(_get(ds, "r_bin", 1)),
+            "reader_options": dict(_get(src, "reader_options",
+                                        _get(ds, "reader_options", {})) or {}),
+            "prebinned": None if not pre else {"q_bin": int(_get(pre, "q_bin", 1)),
+                                               "r_bin": int(_get(pre, "r_bin", 1))},
+        })
+    return specs
+
+
+def finish_info(info, spec, mask_prov=None):
+    """Label, prebinned totals and defect-mask provenance on a dataset_info dict."""
+    info["label"] = spec["label"]
+    if spec.get("prebinned"):                  # binning applied before the file was written
+        info["prebinned"] = spec["prebinned"]
+        info["q_bin"] = info["q_bin"] * spec["prebinned"]["q_bin"]   # totals relative to
+        info["r_bin"] = info["r_bin"] * spec["prebinned"]["r_bin"]   # the raw data
+    if mask_prov:
+        info.update(mask_prov)
+    return info
+
+
+def mask_correction(cfg_or_ds, verbose=True):
+    """Public form of the defect-mask lookup: (correct_fn, provenance) or (None, None)."""
+    ds = getattr(cfg_or_ds, "dataset", cfg_or_ds)
+    return _mask_correction(ds, verbose)
+
+
 def _load_sources(cfg, verbose):
     from core.stream import load_dataset
 
     ds = cfg.dataset
     correct_fn, mask_prov = _mask_correction(ds, verbose)
     cubes, labels, infos = [], [], []
-    for i, src in enumerate(_get(ds, "sources")):
-        path = _resolve(_get(src, "path"))
+    for spec in source_specs(cfg):
         data, info = load_dataset(
-            path, fmt=_get(src, "fmt", _get(ds, "fmt", "auto")),
-            scan_shape=_get(src, "scan_shape", _get(ds, "scan_shape")),
-            crop_y=_get(src, "crop_y"), crop_x=_get(src, "crop_x"),
-            q_bin=int(_get(ds, "q_bin", 1)), r_bin=int(_get(ds, "r_bin", 1)),
-            q_crop=_get(src, "q_crop", _get(ds, "q_crop")),
+            spec["path"], fmt=spec["fmt"], scan_shape=spec["scan_shape"],
+            crop_y=spec["crop_y"], crop_x=spec["crop_x"],
+            q_bin=spec["q_bin"], r_bin=spec["r_bin"], q_crop=spec["q_crop"],
             out_dtype=np.float32, correct_fn=correct_fn,
-            reader_options=dict(_get(src, "reader_options", _get(ds, "reader_options", {})) or {}))
-        label = str(_get(src, "label", f"{i}:{path.stem}"))
-        info["label"] = label
-        pre = _get(src, "prebinned", _get(ds, "prebinned"))
-        if pre:                     # binning applied before this file was written
-            pre = {"q_bin": int(_get(pre, "q_bin", 1)), "r_bin": int(_get(pre, "r_bin", 1))}
-            info["prebinned"] = pre
-            info["q_bin"] = info["q_bin"] * pre["q_bin"]       # totals relative to the
-            info["r_bin"] = info["r_bin"] * pre["r_bin"]       # raw detector and scan
-        if mask_prov:
-            info.update(mask_prov)
+            reader_options=spec["reader_options"])
+        finish_info(info, spec, mask_prov)
         cubes.append(data)
-        labels.append(label)
+        labels.append(spec["label"])
         infos.append(info)
         if verbose:
-            print(f"source {label}: {info['reader']} {path.name} -> {data.shape}")
+            print(f"source {spec['label']}: {info['reader']} {spec['path'].name} -> {data.shape}")
 
     q_shapes = {c.shape[2:] for c in cubes}
     if len(q_shapes) != 1:

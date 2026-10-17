@@ -65,7 +65,8 @@ cd 4Denoising
     ```sh
     source .venv/bin/activate
     python -m scripts.train --config configs/config.yml # to train model from scratch
-    python -m scripts.infer --config configs/config.yml --checkpoint checkpoints\TiO2\002\blind-video-net-5d-cross\run0\checkpoint_50.pth --output results/denoised.h5 # to evaluate trained model
+    python -m scripts.infer --config configs/config.yml --checkpoint checkpoints\TiO2\002\blind-video-net-5d-cross\run0\checkpoint_50.pth --output results/denoised.h5 # to denoise with a trained model
+    python -m scripts.infer --config configs/config_sources.yml --checkpoint <ckpt> --source all --output results/ # every dataset, one .h5 each
     # NEEDS TO BE REWRITTEN python -m scripts.run_pretrain # to run pretrained UDVD model, see references
     python -m scripts.train --config configs/config.yml --weights path/to/checkpoint.pth # start from trained weights (fine-tuning; same as scripts.fine_tune)
     python -m scripts.train --config configs/config.yml --resume path/to/checkpoint_10.pth # continue an interrupted run
@@ -119,6 +120,17 @@ the weights' recorded binning and offset with the data. `--domain-policy`
 stops, `warn` and `off` run and record every difference (key, training value,
 data value) in the provenance of the result, so cross-domain experiments, e.g.
 other binning or camera length, are always labelled as such.
+
+**Inference at scale.** `scripts.infer` reads each dataset in blocks of scan rows
+and denoises them in GPU batches, with the neighbour frames gathered on the GPU,
+so memory is bounded by the block rather than the dataset and full-size scans
+run on a laptop. The output is identical to position-by-position denoising
+(tested). `.h5` output holds `data` (float16 by default), `intensity_image`,
+`mean_pattern` and the full provenance as an attribute, and is resumable: an
+interrupted run continues where it stopped. `--source all` writes one file per
+dataset. Tuning: `--batch-size` (halved automatically on GPU out-of-memory),
+`--block-rows`, `--amp` (mixed precision, faster, not bit-identical).
+
 
 ---
 
