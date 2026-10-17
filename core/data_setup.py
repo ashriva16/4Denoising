@@ -26,7 +26,8 @@ Sources (new): any number of datasets, read through core.readers / core.stream::
       fmt: auto                           # default reader for all sources
       q_bin: 2                            # detector binning (sum)
       r_bin: 1                            # scan binning (sum)
-      defect_mask: true                   # same mask for every source (see below)
+      defect_mask_file: masks/det.h5      # preferred: scripts/make_defect_mask.py
+      defect_mask: true                   # fallback: detect after binning (see below)
       ...
       scan_mask: {mode: all}              # which positions are training targets
 
@@ -34,8 +35,12 @@ Every source must give the same detector shape after binning; scan shapes may
 differ. Per-source keys (``fmt``, ``reader_options``, ``q_crop``) override the
 shared ones.
 
-Defect handling in the sources style detects ONE mask (on the first source) and
-applies it to every source, so all datasets are corrected identically.
+Defect handling in the sources style, in order of preference:
+  ``defect_mask_file``  a mask built once at full detector size
+                        (scripts/make_defect_mask.py); every frame is inpainted
+                        while it is read, before any binning.
+  ``defect_mask: true`` ONE mask detected on the first source after binning and
+                        applied to every source (the original method).
 """
 
 from pathlib import Path
@@ -89,9 +94,13 @@ def _load_legacy(cfg, verbose):
     ds = cfg.dataset
     rel = Path(_get(ds, "data_dir")) / _get(ds, "file")
     data, _ = load_4dstem(_resolve(rel), crop_N=_get(ds, "crop_N"))
+    correct_fn, mask_prov = _mask_correction(ds, verbose)
+    if correct_fn is not None:                    # full-size inpainting, before binning
+        Rx, Ry = data.shape[:2]
+        data = correct_fn(data.reshape(Rx * Ry, *data.shape[2:])).reshape(data.shape)
     if _get(ds, "bin_factor", 1) > 1:
         data = bin_datacube(data, _get(ds, "bin_factor"))
-    if _get(ds, "defect_mask", False):
+    if correct_fn is None and _get(ds, "defect_mask", False):
         mask, _ = detect_dead_pixels(
             data, method=_get(ds, "defect_method", "combined"),
             threshold_factor=_get(ds, "defect_sigma", 5),
@@ -99,14 +108,34 @@ def _load_legacy(cfg, verbose):
         data = correct_dead_pixels(data, mask, method=_get(ds, "defect_correction", "median_local"),
                                    visualize_sample=False)
     info = {"reader": "legacy core.io.load_4dstem", "path": str(rel),
-            "q_bin": int(_get(ds, "bin_factor", 1)), "r_bin": 1}
+            "q_bin": int(_get(ds, "bin_factor", 1)), "r_bin": 1, **(mask_prov or {})}
     return [data], [rel.stem], [info]
+
+
+def _mask_correction(ds, verbose):
+    """correct_fn and provenance from dataset.defect_mask_file, or (None, None)."""
+    path = _get(ds, "defect_mask_file")
+    if not path:
+        return None, None
+    from core.defects import load_mask, make_inpainter
+
+    mask, info = load_mask(_resolve(path))
+    fn = make_inpainter(mask, **dict(info.get("inpaint", {}) or {}))
+    prov = {"defect_mask_file": str(path), "defect_mask_digest": info.get("digest"),
+            "defect_mask_px": int(mask.sum()), "defect_mask_shape": list(mask.shape)}
+    if verbose:
+        print(f"defect mask file {Path(path).name}: {int(mask.sum())} px, "
+              f"digest {info.get('digest')}, applied at full detector size")
+    if _get(ds, "defect_mask", False):
+        print("note: defect_mask_file is set, so defect_mask (post-binning detection) is ignored")
+    return fn, prov
 
 
 def _load_sources(cfg, verbose):
     from core.stream import load_dataset
 
     ds = cfg.dataset
+    correct_fn, mask_prov = _mask_correction(ds, verbose)
     cubes, labels, infos = [], [], []
     for i, src in enumerate(_get(ds, "sources")):
         path = _resolve(_get(src, "path"))
@@ -116,10 +145,12 @@ def _load_sources(cfg, verbose):
             crop_y=_get(src, "crop_y"), crop_x=_get(src, "crop_x"),
             q_bin=int(_get(ds, "q_bin", 1)), r_bin=int(_get(ds, "r_bin", 1)),
             q_crop=_get(src, "q_crop", _get(ds, "q_crop")),
-            out_dtype=np.float32,
+            out_dtype=np.float32, correct_fn=correct_fn,
             reader_options=dict(_get(src, "reader_options", _get(ds, "reader_options", {})) or {}))
         label = str(_get(src, "label", f"{i}:{path.stem}"))
         info["label"] = label
+        if mask_prov:
+            info.update(mask_prov)
         cubes.append(data)
         labels.append(label)
         infos.append(info)
@@ -139,9 +170,10 @@ def load_training_data(cfg, verbose=True):
     ds = cfg.dataset
     if uses_sources(cfg):
         cubes, labels, infos = _load_sources(cfg, verbose)
-        cubes, mask = _defects(cubes, ds, verbose)
-        for info in infos:
-            info["defect_mask_px"] = None if mask is None else int(mask.sum())
+        if not _get(ds, "defect_mask_file"):
+            cubes, mask = _defects(cubes, ds, verbose)
+            for info in infos:
+                info["defect_mask_px"] = None if mask is None else int(mask.sum())
     else:
         cubes, labels, infos = _load_legacy(cfg, verbose)
 

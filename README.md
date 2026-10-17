@@ -101,6 +101,12 @@ are training targets (e.g. a checkerboard half for a leave-one-region-out test).
 `scripts.infer --source <index|label>` denoises one of them with exactly the
 same preprocessing. Configs with `data_dir` + `file` work as before.
 
+**Detector defects.** `python -m scripts.make_defect_mask --config <cfg> --plot mask.png`
+builds the dead/hot-pixel mask once, at full detector size, from a reference
+region (detectors and their parameters in the `defects` section), and saves it
+with its provenance. With `dataset.defect_mask_file` set, every dataset is
+inpainted with that same mask while it is read, before any binning.
+
 ---
 
 ## 👤 Maintainer

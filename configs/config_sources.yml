@@ -1,6 +1,8 @@
 # Training on several datasets at once (see core/data_setup.py).
-# Same model / train / output sections as config.yml; only `dataset` differs.
+# Same model / train / output sections as config.yml; `dataset` differs and
+# `defects` is new.
 #
+#   python -m scripts.make_defect_mask --config configs/config_sources.yml --plot mask.png
 #   python -m scripts.train --config configs/config_sources.yml
 #   python -m scripts.infer --config configs/config_sources.yml --checkpoint <ckpt> --source A
 
@@ -23,11 +25,28 @@ dataset:
     mode: all                          # all / corner / diagonal / checkerboard / file
   neighbor_mode: alternating_spatial
   offset: 0
-  defect_mask: true                    # one mask (from the first source) for all
-  defect_method: combined
-  defect_sigma: 2.5
-  defect_correction: median_local
+  defect_mask_file: masks/detector_mask.h5   # built by scripts.make_defect_mask;
+                                             # applied at full detector size, before binning
+  # without a mask file, the original post-binning detection can be used instead:
+  # defect_mask: true
+  # defect_method: combined
+  # defect_sigma: 2.5
+  # defect_correction: median_local
   image_size: null
+
+defects:                               # read by scripts.make_defect_mask only
+  output: masks/detector_mask.h5
+  reference:                           # frames the mask is computed from
+    source: A                          # label or index in dataset.sources, or a path
+    crop_y: [150, 350]                 # defaults to that source's crop
+    crop_x: [400, 600]
+  detectors:                           # union; types listed in core/defects.py
+    - {type: hot, factor: 3.0}
+    - {type: dead, min_frac: 0.02}
+    # - {type: py4dstem_hot, thresh: 0.3, ind_compare: 5}
+    # - {type: lines, rows: [], cols: [96]}
+    # - {type: pixels, coords: [[10, 12]]}
+  inpaint: {max_radius: 4, min_donors: 3}
 
 model:
   name: blind-video-net-5d-cross
