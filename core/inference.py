@@ -22,7 +22,8 @@ float32 result; use float32 output where that matters.
 
 Writers
     H5Writer     resumable: writes to <output>.partial with a per-row "done" record
-                 and renames on completion; provenance in the file attributes
+                 and renames on completion; provenance in the file attributes;
+                 gzip by default, so any HDF5 reader opens it without plugins
     NpyWriter    memory-mapped .npy (+ provenance JSON next to it)
     ArrayWriter  in memory (tests, small data)
 """
@@ -124,21 +125,21 @@ class H5Writer:
     run key (same weights, data and settings) continues with the missing rows.
     """
 
-    def __init__(self, path, dtype=np.float16, compression="auto"):
+    def __init__(self, path, dtype=np.float16, compression="gzip"):
+        """compression: 'gzip' (default; readable by any HDF5 tool without plugins),
+        'lz4' (bitshuffle-LZ4: faster, but readers need ``import hdf5plugin``) or 'none'."""
+        if compression not in ("gzip", "lz4", "none"):
+            raise ValueError("compression must be 'gzip', 'lz4' or 'none'")
         self.path = Path(path)
         self.partial = Path(str(self.path) + ".partial")
         self.dtype = np.dtype(dtype)
         self.compression = compression
 
     def _filters(self):
-        if self.compression in ("auto", "lz4"):
-            try:
-                import hdf5plugin
-                return dict(hdf5plugin.Bitshuffle(cname="lz4"))
-            except ImportError:
-                if self.compression == "lz4":
-                    raise
-        if self.compression in ("auto", "gzip"):
+        if self.compression == "lz4":
+            import hdf5plugin
+            return dict(hdf5plugin.Bitshuffle(cname="lz4"))
+        if self.compression == "gzip":
             return {"compression": "gzip", "compression_opts": 4, "shuffle": True}
         return {}
 
@@ -408,6 +409,7 @@ def _run_blocks(model, source, writer, done, row_sums, plan, out_shape, scan_sha
                "final_batch_size": bs, "block_rows": block_rows, "edges": edges,
                "neighbor_mode": neighbor_mode, "upsample": int(upsample),
                "offset": offset, "amp": use_amp,
+               "compression": getattr(writer, "compression", None),
                "finished_utc": datetime.datetime.now(datetime.timezone.utc).isoformat()}
     record = dict(provenance or {})
     record["inference"] = {**record.get("inference", {}), **summary}

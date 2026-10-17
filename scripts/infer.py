@@ -106,10 +106,11 @@ def _safe_name(label):
     return re.sub(r"[^A-Za-z0-9._-]+", "_", str(label)).strip("_") or "dataset"
 
 
-def _writer(output, out_dtype):
+def _writer(output, out_dtype, compression="gzip"):
     out = Path(output)
     if out.suffix.lower() in (".h5", ".hdf5"):
-        return H5Writer(out, dtype=np.float16 if out_dtype == "auto" else out_dtype)
+        return H5Writer(out, dtype=np.float16 if out_dtype == "auto" else out_dtype,
+                        compression=compression)
     if out.suffix.lower() == ".npy":
         return NpyWriter(out, dtype=np.float32 if out_dtype == "auto" else out_dtype)
     raise ValueError(f"output must end in .h5, .hdf5 or .npy (or be a directory with "
@@ -128,6 +129,7 @@ def main(cli_args, cfg, config_path):
     block_rows = int(_setting(get('block_rows'), cfg, 'block_rows', 8))
     edges = _setting(get('edges'), cfg, 'edges', 'copy')
     out_dtype = _setting(get('out_dtype'), cfg, 'out_dtype', 'auto')
+    compression = _setting(get('compression'), cfg, 'compression', 'gzip')
     amp = bool(get('amp', False))
     offset = cfg.dataset.get('offset', 0) or 0
     rescale = cfg.train.get('loss', 'mse') in ('poisson_nll', 'weighted_poisson_nll')
@@ -158,7 +160,7 @@ def main(cli_args, cfg, config_path):
                                             offset=offset, policy=policy)
             settings = {"neighbor_mode": neighbor_mode, "edges": edges, "upsample": upsample,
                         "offset": offset, "rescale": rescale, "out_dtype": str(out_dtype),
-                        "amp": amp}
+                        "amp": amp, "compression": compression}
             run_key = hashlib.sha256(json.dumps(
                 [ckpt_digest, info, settings], sort_keys=True, default=str).encode()
             ).hexdigest()[:16]
@@ -175,7 +177,7 @@ def main(cli_args, cfg, config_path):
             summary = denoise_source(
                 model, src, **{k: v for k, v in job["read"].items()}, offset=offset,
                 neighbor_mode=neighbor_mode, edges=edges, upsample=upsample, rescale=rescale,
-                batch_size=batch_size, block_rows=block_rows, writer=_writer(output, out_dtype),
+                batch_size=batch_size, block_rows=block_rows, writer=_writer(output, out_dtype, compression),
                 run_key=run_key, device=device, amp=amp, provenance=record)
         rate = summary["positions_per_second"]
         print(f"  done: {summary['positions_denoised']} positions in {summary['seconds']} s "
@@ -206,6 +208,9 @@ if __name__ == "__main__":
                              "before) or denoised with centre-frame substitution")
     parser.add_argument("--out-dtype", choices=["auto", "float16", "float32"], default=None,
                         help="auto = float16 for .h5, float32 for .npy")
+    parser.add_argument("--compression", choices=["gzip", "lz4", "none"], default=None,
+                        help=".h5 compression: gzip (default, opens anywhere), lz4 (faster, "
+                             "readers need hdf5plugin), none")
     parser.add_argument("--amp", action="store_true",
                         help="mixed-precision inference (faster, not bit-identical)")
     parser.add_argument("--domain-policy", choices=["strict", "warn", "off"], default=None,

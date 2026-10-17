@@ -87,4 +87,5 @@ infer:                                 # scripts.infer; command-line options ove
   batch_size: 16                       # positions per forward pass; halved on GPU out-of-memory
   block_rows: 8                        # scan rows read and denoised per block
   out_dtype: auto                      # float16 for .h5, float32 for .npy
+  compression: gzip                    # gzip (opens anywhere) / lz4 (faster, needs hdf5plugin) / none
   # upsample_factor: 1
