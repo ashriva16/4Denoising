@@ -1,0 +1,55 @@
+# Training on several datasets at once (see core/data_setup.py).
+# Same model / train / output sections as config.yml; only `dataset` differs.
+#
+#   python -m scripts.train --config configs/config_sources.yml
+#   python -m scripts.infer --config configs/config_sources.yml --checkpoint <ckpt> --source A
+
+dataset:
+  sources:                             # paths relative to where you run the command
+    - path: data/example/scan_A_master.h5
+      scan_shape: [500, 1000]          # ARINA and MIB files do not store it
+      crop_y: [200, 300]               # optional per-source scan crop
+      crop_x: [450, 550]
+      label: A
+    - path: data/example/scan_B_master.h5
+      scan_shape: [500, 1000]
+      crop_y: [200, 300]
+      crop_x: [450, 550]
+      label: B
+  fmt: auto                            # arina / h5 / npy / rsciio:<plugin> / auto
+  q_bin: 2                             # detector binning, counts summed
+  r_bin: 1                             # scan binning, counts summed
+  scan_mask:                           # which positions are training targets
+    mode: all                          # all / corner / diagonal / checkerboard / file
+  neighbor_mode: alternating_spatial
+  offset: 0
+  defect_mask: true                    # one mask (from the first source) for all
+  defect_method: combined
+  defect_sigma: 2.5
+  defect_correction: median_local
+  image_size: null
+
+model:
+  name: blind-video-net-5d-cross
+  unet: original
+  channels: 1
+  out_channels: 1
+  bias: false
+  normal: false
+  blind_noise: false
+
+train:
+  lr: 1.0e-4
+  loss: poisson_nll
+  scheduler: multistep
+  num_epochs: 50
+  batch_size: 4
+  val_split: 0.15
+  seed: 314
+  milestones: [15, 30, 40]
+  gamma: 0.5
+  checkpoint: 1
+  num_workers: 0
+
+output:
+  save_dir: checkpoints/example

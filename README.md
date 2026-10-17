@@ -94,6 +94,13 @@ data, info = load_dataset("scan_master.h5", scan_shape=(500, 1000), q_bin=2, r_b
 the reader and every setting, for provenance. A new format is one function
 decorated with `@register_reader("name", extensions=(".ext",))` in `core/readers.py`.
 
+**Several datasets at once.** List them under `dataset.sources` (see
+`configs/config_sources.yml`): they are pooled into one training set, each keeps
+its own neighbour geometry, and `dataset.scan_mask` selects which scan positions
+are training targets (e.g. a checkerboard half for a leave-one-region-out test).
+`scripts.infer --source <index|label>` denoises one of them with exactly the
+same preprocessing. Configs with `data_dir` + `file` work as before.
+
 ---
 
 ## 👤 Maintainer

@@ -10,15 +10,11 @@ from tqdm.auto import tqdm
 
 import core.models as models
 from core.models import get_unet
-from core.dataloader import build_training_dataset
+from core.data_setup import load_training_data, uses_sources
+from core.dataloader import build_multi_dataset, build_scan_mask, build_training_dataset
 from core.losses import build_loss_fn
-from core.preprocessing import (
-    bin_datacube, offset_datacube,
-    detect_dead_pixels, correct_dead_pixels,
-)
 from utils.logger import log_results, save_checkpoint, setup_logging
 from utils.opts import get_configuration
-from core.io import load_4dstem
 import logging
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -26,35 +22,22 @@ use_bf16 = (device.type == "cuda" and torch.cuda.get_device_capability(0)[0] >= 
 dtype = torch.bfloat16 if use_bf16 else torch.float16
 
 
-def load_data(cfg, config_path):
-    filepath = Path(cfg.dataset.data_dir) / cfg.dataset.file
-    if not filepath.is_absolute():
-        filepath = Path.cwd() / filepath  # relative to where you run the command
-    data, metadata = load_4dstem(filepath, crop_N=cfg.dataset.get('crop_N', None))
-
-    # Preprocessing chain
-    if cfg.dataset.get('bin_factor', 1) > 1:
-        data = bin_datacube(data, cfg.dataset.bin_factor)
-
-    if cfg.dataset.get('defect_mask', False):
-        mask, stats = detect_dead_pixels(
-            data,
-            method=cfg.dataset.get('defect_method', 'combined'),
-            threshold_factor=cfg.dataset.get('defect_sigma', 5),
-            min_dead_fraction=cfg.dataset.get('defect_dead_fraction', 0.8),
-            visualize=False,
-        )
-        data = correct_dead_pixels(
-            data, mask,
-            method=cfg.dataset.get('defect_correction', 'median_local'),
-            visualize_sample=False,
-        )
-
-    if cfg.dataset.get('offset', 0) > 0:
-        data = offset_datacube(data, cfg.dataset.offset)
-
-    print(f"Data ready: {data.shape}, range [{data.min():.2f}, {data.max():.2f}]")
-    return data
+def build_dataset(cfg, cubes):
+    """Single legacy file without a scan mask: the original dataset, unchanged.
+    Otherwise: all sources pooled, each with its own scan mask."""
+    neighbor_mode = cfg.dataset.get('neighbor_mode', 'alternating_spatial')
+    image_size = cfg.dataset.get('image_size', None)
+    scan_mask_cfg = cfg.dataset.get('scan_mask', None)
+    if not uses_sources(cfg) and scan_mask_cfg is None:
+        return build_training_dataset(cubes[0], neighbor_mode=neighbor_mode,
+                                      image_size=image_size)
+    sm = dict(scan_mask_cfg or {})
+    mode = sm.pop('mode', 'all')
+    masks = [build_scan_mask(c.shape[0], c.shape[1], mode=mode, **sm) for c in cubes]
+    for c, m in zip(cubes, masks):
+        print(f"  scan mask '{mode}': {int(m.sum())}/{m.size} targets on {c.shape[:2]}")
+    return build_multi_dataset(cubes, masks=masks, neighbor_mode=neighbor_mode,
+                               image_size=image_size)
 
 
 def load_model(cfg):
@@ -81,13 +64,8 @@ def main(cfg, config_path: Path, cli_args):
     torch.manual_seed(cfg.train.seed)
 
     # DATA SETUP -------------------------------------------------------
-    data = load_data(cfg, config_path)
-
-    train_dataset = build_training_dataset(
-        data,
-        neighbor_mode=cfg.dataset.get('neighbor_mode', 'alternating_spatial'),
-        image_size=cfg.dataset.get('image_size', None),
-    )
+    cubes, labels, data_infos = load_training_data(cfg)
+    train_dataset = build_dataset(cfg, cubes)
 
     # Train/val split
     val_size = int(cfg.train.val_split * len(train_dataset))
@@ -117,9 +95,12 @@ def main(cfg, config_path: Path, cli_args):
     model.name = cfg.model.name
 
     # LOSS FUNCTION ----------------------------------------------------
+    # weighted_poisson_nll uses the mean pattern; pooled over all sources
+    pacbed_data = (cubes[0] if len(cubes) == 1
+                   else np.stack([c.mean(axis=(0, 1)) for c in cubes])[None])
     loss_fn = build_loss_fn(
         cfg.train.get('loss', 'mse'),
-        data=data, device=device,
+        data=pacbed_data, device=device,
     )
 
     # TRAINING SETUP ---------------------------------------------------
@@ -189,7 +170,8 @@ def main(cfg, config_path: Path, cli_args):
         model.train()
         train_loss_sum, train_count = 0, 0
 
-        for inputs, targets in train_loader:
+        for batch in train_loader:              # (inputs, targets[, source_id])
+            inputs, targets = batch[0], batch[1]
             inputs = inputs.to(device, non_blocking=True)
             targets = targets.to(device, non_blocking=True)
 
@@ -217,7 +199,8 @@ def main(cfg, config_path: Path, cli_args):
             model.eval()
             val_loss_sum, val_count = 0, 0
             with torch.no_grad():
-                for inputs, targets in valid_loader:
+                for batch in valid_loader:
+                    inputs, targets = batch[0], batch[1]
                     inputs = inputs.to(device, non_blocking=True)
                     targets = targets.to(device, non_blocking=True)
                     with autocast(device_type=device.type,

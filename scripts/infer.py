@@ -20,47 +20,27 @@ from tqdm.auto import tqdm
 import core.models as models
 from core.models import get_unet
 from core.dataloader import DataSetFromArray
-from core.preprocessing import (
-    bin_datacube, offset_datacube, remove_offset,
-    correct_pnll_bias, detect_dead_pixels, correct_dead_pixels,
-    save_denoised_h5,
-)
+from core.data_setup import load_training_data
+from core.preprocessing import correct_pnll_bias, remove_offset, save_denoised_h5
 from utils.opts import get_configuration
-from core.io import load_4dstem
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
-def load_data(cfg, config_path):
-    """Load and preprocess data (same pipeline as training)."""
-    filepath = Path(cfg.dataset.data_dir) / cfg.dataset.file
-    if not filepath.is_absolute():
-        filepath = Path.cwd() / filepath  # relative to where you run the command 
-    data, metadata = load_4dstem(filepath, crop_N=getattr(cfg.dataset,'crop_N', None))
-
-    # Must match training preprocessing exactly
-    if getattr(cfg.dataset,'bin_factor', 1) > 1:
-        data = bin_datacube(data, cfg.dataset.bin_factor)
-
-    if getattr(cfg.dataset,'defect_mask', False):
-        mask, stats = detect_dead_pixels(
-            data,
-            method=getattr(cfg.dataset,'defect_method', 'combined'),
-            threshold_factor=getattr(cfg.dataset,'defect_sigma', 5),
-            min_dead_fraction=getattr(cfg.dataset,'defect_dead_fraction', 0.8),
-            visualize=False,
-        )
-        data = correct_dead_pixels(
-            data, mask,
-            method=getattr(cfg.dataset,'defect_correction', 'median_local'),
-            visualize_sample=False,
-        )
-
-    if getattr(cfg.dataset,'offset', 0) > 0:
-        data = offset_datacube(data, cfg.dataset.offset)
-
-    print(f"Data ready: {data.shape}, range [{data.min():.2f}, {data.max():.2f}]")
-    return data
+def load_data(cfg, config_path, source=0):
+    """Same preprocessing as training (core.data_setup), one source selected by
+    index or label. Legacy single-file configs behave exactly as before."""
+    cubes, labels, infos = load_training_data(cfg)
+    if isinstance(source, str) and not source.isdigit():
+        if source not in labels:
+            raise KeyError(f"source '{source}' not in {labels}")
+        i = labels.index(source)
+    else:
+        i = int(source)
+    data = cubes[i]
+    print(f"Data ready: source {labels[i]} {data.shape}, "
+          f"range [{data.min():.2f}, {data.max():.2f}]")
+    return data, labels[i]
 
 
 def load_model_from_checkpoint(checkpoint_path, cfg):
@@ -211,7 +191,7 @@ def postprocess(denoised, original_data, cfg):
 
 def main(cli_args, cfg, config_path):
     # Load and preprocess data (same pipeline as training)
-    data = load_data(cfg, config_path)
+    data, source_label = load_data(cfg, config_path, source=cli_args.source)
 
     # Also load the data BEFORE offset for bias correction
     original_data = data.copy()
@@ -254,6 +234,7 @@ def main(cli_args, cfg, config_path):
     print(f"{'='*60}")
     print(f"  Model:          {cfg.model.name} (UNet: {cfg.model.get('unet', 'original')})")
     print(f"  Checkpoint:     {cli_args.checkpoint}")
+    print(f"  Source:         {source_label}")
     print(f"  Neighbor mode:  {cfg.infer.neighbor_mode}")
     print(f"  Loss (train):   {cfg.train.get('loss', 'mse')}")
     print(f"  Bin factor:     {getattr(cfg.dataset,'bin_factor', 1)}")
@@ -274,6 +255,8 @@ if __name__ == "__main__":
     parser.add_argument("--output", default="results/denoised.h5")
     parser.add_argument("--neighbor-mode", default=None, choices=["spatial", "temporal"])
     parser.add_argument("--upsample", type=int, default=None)
+    parser.add_argument("--source", default="0",
+                        help="which dataset.sources entry to denoise (index or label)")
     cli_args, remaining = parser.parse_known_args()
 
     # Clear sys.argv so get_configuration doesn't choke
