@@ -72,6 +72,30 @@ cd 4Denoising
 
 ---
 
+## 📂 Input formats
+
+`core.readers` puts one small interface in front of every file format, and
+`core.stream` does the rest (dead-pixel correction at full detector size, crop,
+detector and scan binning) row by row, so full-size scans never have to fit in RAM.
+
+| `fmt` | Data | Notes |
+|---|---|---|
+| `arina` | DECTRIS ARINA `*_master.h5` | streamed; needs `hdf5plugin`; pass `scan_shape` |
+| `h5` | a 4D dataset in any HDF5 file (FPD, py4DSTEM, ...) | `key=` if ambiguous; `index=` for a 5D stack |
+| `npy` | `.npy` | memory-mapped |
+| `rsciio:<plugin>` | anything [RosettaSciIO](https://hyperspy.org/rosettasciio/supported_formats/index.html) reads, e.g. `rsciio:quantumdetector` (Merlin `.mib`) | `pip install ".[formats]"`; lazy where the plugin supports it |
+
+```python
+from core.stream import load_dataset
+data, info = load_dataset("scan_master.h5", scan_shape=(500, 1000), q_bin=2, r_bin=1)
+```
+
+`fmt="auto"` (default) chooses from the extension and file layout. `info` records
+the reader and every setting, for provenance. A new format is one function
+decorated with `@register_reader("name", extensions=(".ext",))` in `core/readers.py`.
+
+---
+
 ## 👤 Maintainer
 
 **Ankit Shrivastava**

@@ -68,7 +68,12 @@ grpcio==1.76.0
 h11==0.16.0
     # via httpcore
 h5py==3.15.1
+    # via
+    #   hdf5plugin
+    #   mic-hackathon-2025 (pyproject.toml)
+hdf5plugin>=4.4
     # via mic-hackathon-2025 (pyproject.toml)
+    # (added by hand; pin it on the next pip-compile)
 httpcore==1.0.9
     # via httpx
 httpx==0.28.1

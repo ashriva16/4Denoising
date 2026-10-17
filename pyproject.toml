@@ -29,10 +29,15 @@ dependencies = [
   "torchinfo",
   "tensorboard",
   "tqdm",
-  "h5py"
+  "h5py",
+  "hdf5plugin"   # bitshuffle/LZ4 filter used by DECTRIS ARINA files
 ]
 
 [project.optional-dependencies]
+# extra file formats through RosettaSciIO (Merlin/MIB, EMPAD, DE, TVIPS, DM, ...)
+formats = [
+  "rosettasciio",
+]
 docs = [
   "sphinx",
   "sphinx-rtd-theme",
