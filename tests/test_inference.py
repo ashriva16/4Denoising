@@ -125,6 +125,13 @@ def test_streaming_from_file_equals_binned_array(tmp_path):
     np.testing.assert_allclose(w.data, ref, rtol=1e-5, atol=1e-6)
 
 
+def test_invalid_settings_are_refused():
+    model, data = _model(), _cube()
+    for bad in ({"amp": "tf32"}, {"edges": "crop"}, {"neighbor_mode": "diagonal"}):
+        with pytest.raises(ValueError):
+            denoise_source(model, ArraySource(data), progress=False, **bad)
+
+
 def test_float16_overflow_is_refused():
     model, data = _model(), _cube() * 1e5        # counts conserved -> values ~ 4e5
     w = ArrayWriter(dtype=np.float16)

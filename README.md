@@ -131,6 +131,9 @@ interrupted run continues where it stopped. `--source all` writes one file per
 dataset. Tuning: `--batch-size` (halved automatically on GPU out-of-memory),
 `--block-rows`, `--amp` (mixed precision, faster, not bit-identical).
 
+**Container.** `Dockerfile` builds one image for workstations (Docker) and HPC
+clusters (Apptainer); see [docs/container.md](docs/container.md).
+
 
 ---
 

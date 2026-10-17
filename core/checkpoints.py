@@ -18,6 +18,7 @@ Older checkpoints without provenance still load, with a warning.
 import datetime
 import hashlib
 import json
+import os
 import platform
 import subprocess
 import sys
@@ -48,15 +49,27 @@ def _plain(x):
 
 
 def _git():
+    """Commit of the running code: from git if this is a checkout, else from the
+    FOURDENOISING_COMMIT environment variable (set when the container is built)."""
     try:
-        commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=REPO_ROOT, capture_output=True,
-                                text=True, timeout=5).stdout.strip() or None
-        dirty = bool(subprocess.run(["git", "status", "--porcelain", "--untracked-files=no"],
-                                    cwd=REPO_ROOT, capture_output=True, text=True,
-                                    timeout=5).stdout.strip())
-        return {"commit": commit, "dirty": dirty}
+        r = subprocess.run(["git", "rev-parse", "HEAD"], cwd=REPO_ROOT, capture_output=True,
+                           text=True, timeout=5)
+        if r.returncode == 0 and r.stdout.strip():
+            st = subprocess.run(["git", "status", "--porcelain", "--untracked-files=no"],
+                                cwd=REPO_ROOT, capture_output=True, text=True, timeout=5)
+            return {"commit": r.stdout.strip(),
+                    "dirty": bool(st.stdout.strip()) if st.returncode == 0 else None,
+                    "source": "git"}
     except Exception:
-        return {"commit": None, "dirty": None}
+        pass
+    env = os.environ.get("FOURDENOISING_COMMIT")
+    return {"commit": env or None, "dirty": None, "source": "env" if env else None}
+
+
+def _container():
+    """Image the code runs in, if it was started from the project's container."""
+    image = os.environ.get("FOURDENOISING_IMAGE")
+    return {"image": image} if image else None
 
 
 def _versions():
@@ -83,7 +96,7 @@ def runtime_info():
         version = None
     return {"created_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             "code": {"version": version, **_git()}, "software": _versions(),
-            "host": platform.node(), "device": _device()}
+            "host": platform.node(), "device": _device(), "container": _container()}
 
 
 def file_digest(path, chunk=1 << 20):
@@ -117,6 +130,7 @@ def build_provenance(cfg, data_infos, init=None):
         "software": _versions(),
         "host": platform.node(),
         "device": _device(),
+        "container": _container(),
         "init": _plain(init or {"mode": "scratch"}),
         "model": _plain(dict(cfg["model"])),
         "training": {k: _plain(v) for k, v in dict(cfg["train"]).items()},

@@ -1,0 +1,12 @@
+# Runtime dependencies of the container, on top of the PyTorch base image
+# (torch itself comes from the image). Versions as in requirements.txt.
+numpy==2.3.5
+scipy==1.17.1
+h5py==3.15.1
+hdf5plugin>=4.4
+scikit-image==0.25.2
+ruamel.yaml==0.18.17
+tqdm==4.67.1
+torchinfo==1.8.0
+tensorboard==2.20.0
+matplotlib==3.10.8

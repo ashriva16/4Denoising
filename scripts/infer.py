@@ -130,7 +130,9 @@ def main(cli_args, cfg, config_path):
     edges = _setting(get('edges'), cfg, 'edges', 'copy')
     out_dtype = _setting(get('out_dtype'), cfg, 'out_dtype', 'auto')
     compression = _setting(get('compression'), cfg, 'compression', 'gzip')
-    amp = bool(get('amp', False))
+    amp = get('amp', False) or _setting(None, cfg, 'amp', False) or False
+    if amp is True:
+        amp = "auto"
     offset = cfg.dataset.get('offset', 0) or 0
     rescale = cfg.train.get('loss', 'mse') in ('poisson_nll', 'weighted_poisson_nll')
     policy = resolve_policy(get('domain_policy'), cfg)
@@ -211,8 +213,10 @@ if __name__ == "__main__":
     parser.add_argument("--compression", choices=["gzip", "lz4", "none"], default=None,
                         help=".h5 compression: gzip (default, opens anywhere), lz4 (faster, "
                              "readers need hdf5plugin), none")
-    parser.add_argument("--amp", action="store_true",
-                        help="mixed-precision inference (faster, not bit-identical)")
+    parser.add_argument("--amp", nargs="?", const="auto", default=None,
+                        choices=["auto", "bf16", "fp16"],
+                        help="mixed precision (faster, not bit-identical): auto = bfloat16 "
+                             "where supported, else float16; the precision used is recorded")
     parser.add_argument("--domain-policy", choices=["strict", "warn", "off"], default=None,
                         help="weights trained with other binning/offset: strict = stop "
                              "(default), warn/off = run and record the differences")

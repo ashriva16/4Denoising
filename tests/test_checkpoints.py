@@ -271,3 +271,16 @@ def test_prebinned_sources_report_total_binning(tmp_path, monkeypatch):
     assert check_compatible(prov, infos) == []           # 2 x 8 binning matches
     with pytest.raises(IncompatibleWeights):                 # without prebinned it would not
         check_compatible(prov, [dict(infos[0], q_bin=1, r_bin=1)])
+
+
+def test_commit_falls_back_to_environment(monkeypatch, tmp_path):
+    """Inside a container there is no .git: the commit comes from the build."""
+    import core.checkpoints as ck
+    monkeypatch.setattr(ck, "REPO_ROOT", tmp_path)              # not a git checkout
+    monkeypatch.setenv("FOURDENOISING_COMMIT", "abc123")
+    monkeypatch.setenv("FOURDENOISING_IMAGE", "4denoising:0.1.0")
+    info = ck.runtime_info()
+    assert info["code"]["commit"] == "abc123" and info["code"]["source"] == "env"
+    assert info["container"] == {"image": "4denoising:0.1.0"}
+    monkeypatch.delenv("FOURDENOISING_COMMIT")
+    assert ck.runtime_info()["code"]["commit"] is None

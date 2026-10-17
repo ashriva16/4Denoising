@@ -247,7 +247,9 @@ def denoise_source(model, source, *, scan_shape=None, crop_y=None, crop_x=None, 
     batch_size  : positions per forward pass; halved automatically on GPU out-of-memory
     block_rows  : output scan rows read and denoised per block (>= 2)
     writer      : H5Writer / NpyWriter / ArrayWriter (default: ArrayWriter)
-    amp         : bfloat16/float16 autocast (faster on recent GPUs, not bit-identical)
+    amp         : mixed precision: False (full precision), "auto" or True (bfloat16 on
+                  GPUs that support it, else float16), "bf16" or "fp16". Faster on recent
+                  GPUs, not bit-identical; the dtype used is recorded in the summary.
     """
     import torch
     import torch.nn.functional as F
@@ -256,6 +258,8 @@ def denoise_source(model, source, *, scan_shape=None, crop_y=None, crop_x=None, 
         raise ValueError(f"neighbor_mode must be one of {list(NEIGHBOR_OFFSETS)}")
     if edges not in ("copy", "denoise"):
         raise ValueError("edges must be 'copy' or 'denoise'")
+    if amp not in (False, None, True, "auto", "bf16", "fp16"):
+        raise ValueError("amp must be False, 'auto', 'bf16' or 'fp16'")
     block_rows = max(2, int(block_rows))
     device = device or next(model.parameters()).device
     writer = writer or ArrayWriter()
@@ -288,8 +292,13 @@ def _run_blocks(model, source, writer, done, row_sums, plan, out_shape, scan_sha
     dr = torch.tensor([o[0] for o in offsets], device=device)
     dc = torch.tensor([o[1] for o in offsets], device=device)
     use_amp = bool(amp) and device.type == "cuda"
-    amp_dtype = (torch.bfloat16 if use_amp and torch.cuda.get_device_capability(device)[0] >= 8
-                 else torch.float16)
+    if amp == "fp16":
+        amp_dtype = torch.float16
+    elif amp == "bf16":
+        amp_dtype = torch.bfloat16
+    else:                                       # auto: bfloat16 where supported (Ampere+)
+        amp_dtype = (torch.bfloat16 if use_amp and torch.cuda.get_device_capability(device)[0] >= 8
+                     else torch.float16)
 
     blocks = _block_ranges(R, block_rows)
     todo = [(r0, r1) for r0, r1 in blocks if not done[r0:r1].all()]
@@ -409,6 +418,8 @@ def _run_blocks(model, source, writer, done, row_sums, plan, out_shape, scan_sha
                "final_batch_size": bs, "block_rows": block_rows, "edges": edges,
                "neighbor_mode": neighbor_mode, "upsample": int(upsample),
                "offset": offset, "amp": use_amp,
+               "amp_dtype": ({torch.bfloat16: "bfloat16", torch.float16: "float16"}[amp_dtype]
+                             if use_amp else None),
                "compression": getattr(writer, "compression", None),
                "finished_utc": datetime.datetime.now(datetime.timezone.utc).isoformat()}
     record = dict(provenance or {})
